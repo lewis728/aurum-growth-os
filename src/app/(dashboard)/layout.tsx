@@ -18,12 +18,17 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ── Onboarding redirect guard ─────────────────────────────────────────────
-  // Only runs for authenticated users (Clerk middleware protects the route).
-  // Wrapped in try/catch: if Clerk context is unavailable (e.g. unauthenticated
-  // requests that bypass the middleware matcher), fall through gracefully.
+  // ── Auth + onboarding guards ─────────────────────────────────────────────
+  // Guard 1: signed in but no org → create one first
+  // Guard 2: has org but no blueprints → complete onboarding
   try {
-    const { orgId } = await auth();
+    const { userId, orgId } = await auth();
+
+    // Signed in but no organisation yet — auto-create one on /setup-org
+    if (userId && !orgId) {
+      redirect("/setup-org");
+    }
+
     if (orgId) {
       const blueprintCount = await prisma.campaignBlueprint.count({
         where: { tenantId: orgId },
@@ -32,9 +37,15 @@ export default async function DashboardLayout({
         redirect("/onboarding");
       }
     }
-  } catch {
-    // auth() threw — Clerk context unavailable. Fall through; page-level
-    // SignedIn/SignedOut guards will handle the authentication state.
+  } catch (err) {
+    // Re-throw Next.js redirect signals — they must propagate
+    if (
+      err instanceof Error &&
+      (err.message === "NEXT_REDIRECT" || (err as { digest?: string }).digest?.startsWith("NEXT_REDIRECT"))
+    ) {
+      throw err;
+    }
+    // auth() threw for another reason — fall through gracefully
   }
 
   return (

@@ -23,11 +23,16 @@ export const metadata = {
 
 export default async function OnboardingPage() {
   // ── Auth check ──────────────────────────────────────────────────────────────
-  const { orgId } = await auth();
+  const { userId, orgId } = await auth();
+
+  if (!userId) {
+    // Not authenticated at all
+    redirect("/sign-in");
+  }
 
   if (!orgId) {
-    // Not authenticated — Clerk middleware should handle this, but guard anyway
-    redirect("/sign-in");
+    // Signed in but no organisation yet — create one first
+    redirect("/setup-org");
   }
 
   // ── Check for existing blueprints ───────────────────────────────────────────
