@@ -12,10 +12,14 @@ const isPublicRoute = createRouteMatcher([
   "/api/test(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
+export default clerkMiddleware((auth, req: NextRequest) => {
   if (!isPublicRoute(req)) {
-    await auth.protect();
+    auth().protect();
   }
+  // Add a custom header to confirm middleware ran
+  const response = NextResponse.next();
+  response.headers.set("x-middleware-ran", "true");
+  return response;
 });
 
 export const config = {
