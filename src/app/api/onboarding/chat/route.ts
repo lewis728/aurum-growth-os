@@ -83,14 +83,19 @@ async function* streamText(
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+  // Only userId is required — this route is called during onboarding before
+  // the tenant is fully set up. orgId may be null if the JWT cookie is still
+  // propagating after setActive(), but we allow the request through.
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? null;
 
-  // ── 2. Subscription access check ─────────────────────────────────────────
-  const access = await canLaunchCampaign(tenantId);
-  if (!access.allowed) {
-    return NextResponse.json({ error: access.reason }, { status: 403 });
+  // ── 2. Subscription access check (only if tenant is known) ───────────────
+  if (tenantId) {
+    const access = await canLaunchCampaign(tenantId);
+    if (!access.allowed) {
+      return NextResponse.json({ error: access.reason }, { status: 403 });
+    }
   }
 
 
@@ -122,7 +127,8 @@ const { orgId } = await auth();
     async start(controller) {
       try {
         // ── Run onboarding engine ───────────────────────────────────────────
-        const result = await runOnboardingConversation(tenantId, fullHistory);
+        // tenantId may be null if JWT is still propagating; use userId as fallback key
+        const result = await runOnboardingConversation(tenantId ?? userId!, fullHistory);
 
         if (result.error) {
           controller.enqueue(
@@ -141,6 +147,13 @@ const { orgId } = await auth();
 
         // ── Onboarding complete — save blueprint to DB ──────────────────────
         if (result.isComplete && result.blueprint) {
+          // If orgId is still null, we cannot persist the blueprint — emit error
+          if (!tenantId) {
+            controller.enqueue(encoder.encode(sseEvent({ type: "error", message: "Session not ready yet. Please refresh and try again." })));
+            controller.enqueue(encoder.encode(sseEvent({ type: "done" })));
+            controller.close();
+            return;
+          }
           const bp = result.blueprint;
 
           // Persist to DB with status DRAFT
