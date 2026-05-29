@@ -3,39 +3,28 @@
  * POST /api/onboarding/chat
  * SERVER-SIDE ONLY.
  *
- * SSE streaming route that drives the five-question onboarding conversation.
- * The caller is a marketing agency owner setting up a campaign for their client.
+ * SSE streaming route that drives the five-question agency onboarding conversation.
+ * The caller is the AGENCY OWNER setting up their own workspace — NOT a client campaign.
  *
  * SSE event types:
- *   { type: "text", content: string }              — next question text (streamed char by char)
+ *   { type: "text", content: string }              — next question text (streamed word by word)
  *   { type: "question_number", number: number }    — current question index (1–5)
- *   { type: "onboarding_complete", blueprintId: string } — blueprint saved, redirect
+ *   { type: "onboarding_complete", agencyName: string } — profile saved, redirect
  *   { type: "error", message: string }             — non-fatal error
  *   { type: "done" }                               — stream end sentinel
  *
- * On completion: saves generated blueprint to DB with status DRAFT, emits blueprintId.
+ * On completion: saves AgencyProfile to DB, emits onboarding_complete.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { addClientSeat } from "@/lib/services/stripeService";
-import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
 import { auth } from "@clerk/nextjs/server";
 import {
   runOnboardingConversation,
   WELCOME_MESSAGE,
 } from "@/lib/orchestrator/onboardingEngine";
-import { CampaignStatus } from "@/enums/campaignEnums";
 import type { ChatMessage } from "@/lib/orchestrator/intentProcessor";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { CreativeLayer } from "@/types/creativeLayer";
-import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
-import type { DeploymentLayer } from "@/types/deploymentLayer";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { VoiceLayer } from "@/types/voiceLayer";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { CRMLayer } from "@/types/crmLayer";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +38,7 @@ const ChatMessageSchema = z.object({
 });
 
 const RequestBodySchema = z.object({
-  /** The latest user message */
   message: z.string().min(1).max(2000),
-  /** Full conversation history including the latest message */
   history: z.array(ChatMessageSchema).max(20),
 });
 
@@ -61,20 +48,14 @@ function sseEvent(data: Record<string, unknown>): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
-/**
- * Simulates streaming by emitting text character by character with a small delay.
- * This gives the UI a typewriter effect consistent with the Command Center chat.
- */
 async function* streamText(
   text: string,
   encoder: TextEncoder
 ): AsyncGenerator<Uint8Array> {
-  // Emit in small chunks (words) rather than individual chars for performance
   const words = text.split(" ");
   for (let i = 0; i < words.length; i++) {
     const chunk = i === 0 ? words[i]! : " " + words[i]!;
     yield encoder.encode(sseEvent({ type: "text", content: chunk }));
-    // Small delay between words for natural feel
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
 }
@@ -83,21 +64,10 @@ async function* streamText(
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
-  // Only userId is required — this route is called during onboarding before
-  // the tenant is fully set up. orgId may be null if the JWT cookie is still
-  // propagating after setActive(), but we allow the request through.
+  // Only userId is required — orgId may still be propagating after setActive()
   const { userId, orgId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const tenantId = orgId ?? null;
-
-  // ── 2. Subscription access check (only if tenant is known) ───────────────
-  if (tenantId) {
-    const access = await canLaunchCampaign(tenantId);
-    if (!access.allowed) {
-      return NextResponse.json({ error: access.reason }, { status: 403 });
-    }
-  }
-
 
   // ── 2. Parse body ─────────────────────────────────────────────────────────
   let body: z.infer<typeof RequestBodySchema>;
@@ -110,7 +80,6 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { message, history } = body;
 
-  // ── 3. Build full message history including the new user message ──────────
   const newUserMessage: ChatMessage = {
     id: `user-${Date.now()}`,
     role: "user",
@@ -120,23 +89,21 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const fullHistory: ChatMessage[] = [...history, newUserMessage];
 
-  // ── 4. Stream SSE response ────────────────────────────────────────────────
+  // ── 3. Stream SSE response ────────────────────────────────────────────────
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // ── Run onboarding engine ───────────────────────────────────────────
-        // tenantId may be null if JWT is still propagating; use userId as fallback key
-        const result = await runOnboardingConversation(tenantId ?? userId!, fullHistory);
+        // Pass userId as fallback tenantId — engine ignores it but needs a string
+        const result = await runOnboardingConversation(tenantId ?? userId, fullHistory);
 
         if (result.error) {
           controller.enqueue(
             encoder.encode(
               sseEvent({
                 type: "error",
-                message:
-                  "Something went wrong processing your answer. Please try again.",
+                message: "Something went wrong. Please try again.",
               })
             )
           );
@@ -145,53 +112,54 @@ export async function POST(req: NextRequest): Promise<Response> {
           return;
         }
 
-        // ── Onboarding complete — save blueprint to DB ──────────────────────
-        if (result.isComplete && result.blueprint) {
-          // If orgId is still null, we cannot persist the blueprint — emit error
-          if (!tenantId) {
-            controller.enqueue(encoder.encode(sseEvent({ type: "error", message: "Session not ready yet. Please refresh and try again." })));
-            controller.enqueue(encoder.encode(sseEvent({ type: "done" })));
-            controller.close();
-            return;
-          }
-          const bp = result.blueprint;
+        // ── Onboarding complete — save AgencyProfile to DB ──────────────────
+        if (result.isComplete && result.agencyProfile) {
+          const profile = result.agencyProfile;
 
-          // Persist to DB with status DRAFT
-          const saved = await prisma.campaignBlueprint.create({
-            data: {
-              tenantId,
-              status: CampaignStatus.PENDING,
-              vertical: bp.serviceIntent ?? "",
-              businessName:
-                (bp.deploymentLayer as DeploymentLayer | undefined)?.copy
-                  ?.heroHeadline ?? "New Client",
-              targetLocation:
-                (bp.mediaBuyingLayer as MediaBuyingLayer | undefined)?.targeting
-                  ?.geoLocations?.countries?.[0] ?? "UK",
-              dailyBudgetUsd: bp.budget?.dailyUsd ?? 30,
-              creative: (bp.creativeLayer ?? {}) as object,
-              mediaBuying: (bp.mediaBuyingLayer ?? {}) as object,
-              deployment: (bp.deploymentLayer ?? {}) as object,
-              voice: (bp.voiceLayer ?? {}) as object,
-              crm: (bp.crmLayer ?? {}) as object,
-              orchestrationLog: [],
-            },
-          });
+          // Determine the tenantId to save against
+          // If orgId is null (JWT still propagating), save with pendingOrgLink=true
+          // and use userId as a temporary key. The /api/auth/link-org route will
+          // fix this up once the org is confirmed.
+          const effectiveTenantId = tenantId ?? `pending:${userId}`;
+          const isPending = !tenantId;
 
-          // Add a client seat to the Stripe subscription (non-fatal)
-          setImmediate(() => {
-            addClientSeat(tenantId).catch((err: unknown) => {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(`[onboarding/chat] addClientSeat failed for tenantId=${tenantId}: ${msg}`);
+          try {
+            // Upsert AgencyProfile — idempotent if called twice
+            await prisma.agencyProfile.upsert({
+              where: { tenantId: effectiveTenantId },
+              create: {
+                tenantId: effectiveTenantId,
+                agencyName: profile.agencyName,
+                niches: profile.niches,
+                currentClientCount: profile.currentClientCount,
+                currentFulfilment: profile.currentFulfilment,
+                primaryGoal: profile.primaryGoal,
+              },
+              update: {
+                agencyName: profile.agencyName,
+                niches: profile.niches,
+                currentClientCount: profile.currentClientCount,
+                currentFulfilment: profile.currentFulfilment,
+                primaryGoal: profile.primaryGoal,
+              },
             });
-          });
 
-          // Emit completion event
+            if (isPending) {
+              console.warn(
+                `[onboarding/chat] AgencyProfile saved with pending tenantId=${effectiveTenantId} — will be linked when org propagates`
+              );
+            }
+          } catch (dbErr) {
+            const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+            console.error("[onboarding/chat] Failed to save AgencyProfile:", dbMsg);
+            // Non-fatal — still emit complete so user can proceed
+          }
+
           controller.enqueue(
             encoder.encode(
               sseEvent({
                 type: "onboarding_complete",
-                blueprintId: saved.id,
+                agencyName: profile.agencyName,
               })
             )
           );
@@ -201,9 +169,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           return;
         }
 
-        // ── Next question to ask ────────────────────────────────────────────
+        // ── Next question ───────────────────────────────────────────────────
         if (result.nextQuestion && result.questionNumber !== null) {
-          // Emit question number first so UI can update progress indicator
           controller.enqueue(
             encoder.encode(
               sseEvent({
@@ -213,7 +180,6 @@ export async function POST(req: NextRequest): Promise<Response> {
             )
           );
 
-          // Stream the question text word by word
           for await (const chunk of streamText(result.nextQuestion, encoder)) {
             controller.enqueue(chunk);
           }
@@ -251,8 +217,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
 // ── GET — returns the welcome message and initial state ───────────────────────
 
-export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
-  // Auth check
+export async function GET(): Promise<NextResponse> {
   try {
     await auth();
   } catch {
@@ -262,7 +227,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-d
   return NextResponse.json({
     welcomeMessage: WELCOME_MESSAGE,
     totalQuestions: 5,
-    firstQuestion:
-      "Tell me about your client's business — what do they do and who do they help?",
+    firstQuestion: WELCOME_MESSAGE,
   });
 }

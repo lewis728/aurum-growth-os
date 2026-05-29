@@ -7,7 +7,7 @@
  * client campaign. Warm, welcoming design — distinct from the Command Center.
  *
  * Copy is framed for the agency owner:
- *   - "Set up your client" (not "Tell us about your business")
+ *   - "Set up your agency" (not "Tell us about your business")
  *   - "your client's business", "your client's AI representative"
  *   - Welcome: "Let's set up your next client campaign."
  *
@@ -35,10 +35,10 @@ interface Message {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WELCOME_MESSAGE =
-  "Let's set up your next client campaign. I'll ask you five quick questions and have everything ready to launch.";
+  "Let's personalise your Aurum OS. Five quick questions about your agency and you're in.";
 
 const FIRST_QUESTION =
-  "Tell me about your client's business — what do they do and who do they help?";
+  "Let's get your agency set up. What's the name of your agency?";
 
 const TOTAL_QUESTIONS = 5;
 
@@ -134,7 +134,7 @@ function CompletionBanner() {
         </svg>
       </div>
       <h3 className="text-lg font-semibold text-stone-800 mb-2">
-        Client campaign ready
+        Agency workspace ready
       </h3>
       <p className="text-sm text-stone-500">
         Taking you to the dashboard to review and launch...
@@ -297,7 +297,7 @@ export default function OnboardingChat() {
             }
 
             case "onboarding_complete": {
-              const blueprintId = event["blueprintId"] as string;
+              const agencyName = (event["agencyName"] as string | undefined) ?? "";
               setIsComplete(true);
               setIsStreaming(false);
               setStreamingMessageId(null);
@@ -310,7 +310,10 @@ export default function OnboardingChat() {
               // Route via /setup-org to ensure a fresh JWT with orgId before
               // the dashboard layout runs its server-side orgId check.
               setTimeout(() => {
-                window.location.href = `/setup-org?from=onboarding&blueprintId=${blueprintId}`;
+                const dest = agencyName
+                  ? `/setup-org?from=onboarding&agencyName=${encodeURIComponent(agencyName)}`
+                  : "/setup-org?from=onboarding";
+                window.location.href = dest;
               }, 2500);
               return;
             }
@@ -369,7 +372,7 @@ export default function OnboardingChat() {
               </div>
               <span className="text-stone-300">·</span>
               <h1 className="text-sm font-medium text-stone-600">
-                Set up your client
+                Set up your agency
               </h1>
             </div>
             {!isComplete && (

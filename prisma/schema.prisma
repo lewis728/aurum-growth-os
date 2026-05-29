@@ -30,15 +30,47 @@ model CampaignBlueprint {
   voice            Json     // VoiceLayer
   crm              Json     // CRMLayer
   orchestrationLog Json     @default("[]") // OrchestratorEvent[]
-  aggregated       Boolean  @default(false)  // Set to true after performanceAggregator runs
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  aggregated         Boolean  @default(false)  // Set to true after performanceAggregator runs
+  pendingOrgLink     Boolean  @default(false)  // true if saved with userId fallback before orgId propagated
+  // Agency onboarding answers (populated during onboarding chat)
+  agencyName         String?
+  niches             String?
+  currentClientCount String?
+  currentFulfilment  String?
+  primaryGoal        String?
+  // Add Client answers (populated during add-client chat)
+  businessDescription String?
+  monthlyAdBudget    String?
+  idealLead          String?
+  desiredOutcome     String?
+  offerHook          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   leads            Lead[]
   appointments     Appointment[]
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([pendingOrgLink])
+}
+
+// ── AgencyProfile ────────────────────────────────────────────────────
+// One per tenant. Created at the end of the onboarding conversation.
+// Stores the agency owner's answers to the 5 onboarding questions.
+model AgencyProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  agencyName         String
+  niches             String
+  currentClientCount String
+  currentFulfilment  String
+  primaryGoal        String
+  onboardedAt        DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 // ── Lead ─────────────────────────────────────────────────────────────
