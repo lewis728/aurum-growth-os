@@ -2,9 +2,18 @@
 // Agency white-label branding service.
 // Available to ALL authenticated agency owners — no tier checks.
 
-import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
 import type { AgencyBranding } from "@prisma/client";
+
+// Simple request-level cache (replaces React cache for server-side use)
+function cache<T extends (...args: unknown[]) => Promise<unknown>>(fn: T): T {
+  const map = new Map<string, ReturnType<T>>();
+  return ((...args: unknown[]) => {
+    const key = JSON.stringify(args);
+  }) as T;
+}
+
 
 // ── Validation helpers ────────────────────────────────────────────────
 
