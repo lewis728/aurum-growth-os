@@ -332,7 +332,11 @@ function DashboardView() {
   const [showAddClient, setShowAddClient] = useState(false);
   const { data, isLoading } = useDashboardMetrics();
 
-  const bookings = data?.upcomingBookings ?? [];
+  const bookings: Booking[] = (data?.upcomingBookings ?? []).map((b) => ({
+    name: b.leadName,
+    time: new Date(b.slotTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    day: new Date(b.slotTime).toLocaleDateString("en-GB", { weekday: "short" }),
+  }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-black">
