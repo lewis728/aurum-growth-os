@@ -6,8 +6,8 @@
 // re-deployments from the dashboard.
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerTenantId } from "@/lib/serverAuth";
 import { z }                          from "zod";
-import { getTenantId }                from "@/lib/auth";
 import { prisma }                     from "@/lib/prisma";
 import { validateStripeMandate }      from "@/lib/services/stripeService";
 import { assembleRetellPromptAsync }  from "@/lib/services/retellPromptAssembler";
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Auth ────────────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

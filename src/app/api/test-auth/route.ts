@@ -4,13 +4,12 @@
 // This file will be deleted after Stage 03 is confirmed complete.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId } from "@/lib/auth";
-
+import { getServerTenantId } from "@/lib/serverAuth";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
+export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   try {
-    const tenantId = await getTenantId();
+    const tenantId = await getServerTenantId(req);
     return NextResponse.json({ tenantId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

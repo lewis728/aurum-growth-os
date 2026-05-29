@@ -17,8 +17,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { z } from "zod";
-import { getTenantId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addClientSeat } from "@/lib/services/stripeService";
 import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -241,10 +241,10 @@ export async function POST(req: NextRequest): Promise<Response> {
 
 // ── GET — returns the welcome message and initial state ───────────────────────
 
-export async function GET(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
+export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   // Auth check
   try {
-    await getTenantId();
+    await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -9,8 +9,8 @@
 //         If Retell deploy fails: logs to CommandLog but still returns the saved record.
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerTenantId } from "@/lib/serverAuth";
 import { z }                          from "zod";
-import { getTenantId }                from "@/lib/auth";
 import { prisma }                     from "@/lib/prisma";
 import { validateStripeMandate }      from "@/lib/services/stripeService";
 import { assembleRetellPromptAsync }  from "@/lib/services/retellPromptAssembler";
@@ -85,7 +85,7 @@ function buildBlueprintFromRow(row: {
 export async function GET(req: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

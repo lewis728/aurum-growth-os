@@ -2,8 +2,8 @@
 // GET — returns all CampaignBlueprint rows for the authenticated agency tenant,
 //        with aggregated lead and appointment counts.
 
-import { NextResponse } from "next/server";
-import { getTenantId } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +19,10 @@ export interface ClientSummary {
   createdAt:        string;
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

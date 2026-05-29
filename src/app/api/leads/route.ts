@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId }               from "@/lib/auth";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma }                    from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(request);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

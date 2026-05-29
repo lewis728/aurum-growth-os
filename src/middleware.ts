@@ -1,26 +1,18 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+/**
+ * Minimal pass-through middleware.
+ *
+ * We do NOT use clerkMiddleware here because it imports node:async_hooks
+ * (via AsyncLocalStorage) which crashes silently in Vercel's Edge runtime.
+ *
+ * Authentication is handled directly in each API route handler using
+ * @clerk/backend's authenticateRequest() via src/lib/serverAuth.ts.
+ */
+import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/webhooks/(.*)",
-  "/api/cron/(.*)",
-  "/api/debug(.*)",
-  "/api/branding/(.*)",
-  "/api/test(.*)",
-]);
-
-export default clerkMiddleware((auth, req: NextRequest) => {
-  if (!isPublicRoute(req)) {
-    auth().protect();
-  }
-  // Add a custom header to confirm middleware ran
-  const response = NextResponse.next();
-  response.headers.set("x-middleware-ran", "true");
-  return response;
-});
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function middleware() {
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

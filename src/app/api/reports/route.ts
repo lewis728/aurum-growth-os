@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId } from "@/lib/auth";
+import { getServerTenantId } from "@/lib/serverAuth";
 import { validateStripeMandate } from "@/lib/services/stripeService";
 import { prisma } from "@/lib/prisma";
 
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Auth ──────────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

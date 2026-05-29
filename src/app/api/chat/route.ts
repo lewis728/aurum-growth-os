@@ -11,10 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
+import { clerkClient } from "@clerk/nextjs/server";
 import OpenAI from "openai";
 import { z } from "zod";
-import { clerkClient } from "@clerk/nextjs/server";
-import { getTenantId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildSystemPrompt } from "@/lib/chat/systemPrompt";
 import { LAUNCH_FUNNEL_TOOL } from "@/lib/chat/functionSchemas";
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ──────────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

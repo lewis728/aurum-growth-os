@@ -23,8 +23,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { z } from "zod";
-import { getTenantId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateCampaignBudget } from "@/lib/services/metaAdsService";
 import { getSubscriptionStatus } from "@/lib/services/stripeService";
@@ -74,7 +74,7 @@ export async function PATCH(
   // ── 1. Auth ────────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

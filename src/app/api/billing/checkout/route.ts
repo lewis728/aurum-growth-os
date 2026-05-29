@@ -4,8 +4,8 @@
  * Returns { url } — frontend opens in a new tab.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { getTenantId } from "@/lib/auth";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
+import { clerkClient } from "@clerk/nextjs/server";
 import {
   createOrRetrieveCustomer,
   createCheckoutSession,
@@ -14,12 +14,12 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { userId } = await auth();
+  const { userId } = await getServerAuth(req);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = await getTenantId();
+  const tenantId = await getServerTenantId(req);
   if (!tenantId) {
     return NextResponse.json({ error: "No organisation found" }, { status: 400 });
   }

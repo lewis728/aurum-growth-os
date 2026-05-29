@@ -18,9 +18,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import crypto from "crypto";
-import { getTenantId } from "@/lib/auth";
-
 export const dynamic = "force-dynamic";
 
 const CALENDLY_OAUTH_BASE = "https://auth.calendly.com/oauth/authorize";
@@ -59,7 +58,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── 1. Authenticate ───────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

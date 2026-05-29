@@ -16,7 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId } from "@/lib/auth";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { uploadCreativeAsset } from "@/lib/services/storageService";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

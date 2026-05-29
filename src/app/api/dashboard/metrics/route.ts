@@ -8,8 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { Prisma }       from "@prisma/client";
-import { getTenantId } from "@/lib/auth";
 import { prisma }      from "@/lib/prisma";
 import type { CallAnalysis }     from "@/types/voiceLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
@@ -125,7 +125,7 @@ function getMetaCampaignId(mediaBuying: unknown): string | null {
 export async function GET(req: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

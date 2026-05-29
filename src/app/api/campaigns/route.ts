@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId }   from "@/lib/auth";
+import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma }        from "@/lib/prisma";
 import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
 
@@ -17,10 +17,10 @@ export const dynamic = "force-dynamic";
 // Placeholder for future direct blueprint creation endpoint.
 // Currently blueprints are created via /api/onboarding/chat.
 // Guard is here so any future POST is protected from the start.
-export async function POST(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
+export async function POST(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -35,10 +35,10 @@ export async function POST(_req: NextRequest): Promise<NextResponse> { // eslint
 }
 
 // ─── GET /api/campaigns ───────────────────────────────────────────────────────
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   let tenantId: string;
   try {
-    tenantId = await getTenantId();
+    tenantId = await getServerTenantId(req);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
