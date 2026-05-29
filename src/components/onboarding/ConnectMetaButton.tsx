@@ -112,6 +112,7 @@ export default function ConnectMetaButton(): JSX.Element {
 
   // ── Consume OAuth redirect query params ───────────────────────────────────
   useEffect(() => {
+    if (!searchParams) return;
     const connected = searchParams.get("meta_connected");
     const error = searchParams.get("meta_error");
 

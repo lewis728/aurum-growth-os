@@ -12,6 +12,8 @@ import { Suspense } from "react";
 import BrandingConfig from "@/components/onboarding/BrandingConfig";
 import { ClientOverview } from "@/components/dashboard/ClientOverview";
 
+export const dynamic = "force-dynamic";
+
 // ── Skeleton loaders ──────────────────────────────────────────────────────────
 function FormSkeleton(): JSX.Element {
   return (

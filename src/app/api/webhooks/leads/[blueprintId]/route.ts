@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { triggerAutomations } from "@/lib/services/automationEngine";
 import type { CRMLayer } from "@/types/crmLayer";
 
+export const dynamic = "force-dynamic";
+
 // ── Null guard — fail fast at module load if secret is missing ────────────────
 const secret = process.env.LEAD_WEBHOOK_SECRET;
 if (!secret) throw new Error("LEAD_WEBHOOK_SECRET is not set");

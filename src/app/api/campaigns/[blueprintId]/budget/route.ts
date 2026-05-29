@@ -30,6 +30,8 @@ import { updateCampaignBudget } from "@/lib/services/metaAdsService";
 import { getSubscriptionStatus } from "@/lib/services/stripeService";
 import type { Prisma } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 // ── GBP → USD conversion ──────────────────────────────────────────────────────
 
 const GBPUSD_RATE = parseFloat(process.env.GBPUSD_RATE ?? "1.27");

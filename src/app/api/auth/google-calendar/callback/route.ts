@@ -27,6 +27,8 @@ import { prisma } from "@/lib/prisma";
 import { encryptToken } from "@/lib/services/metaAuthService";
 import { CalendarProvider } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 

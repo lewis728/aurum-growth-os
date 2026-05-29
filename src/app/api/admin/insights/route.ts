@@ -12,13 +12,15 @@ import { prisma } from "@/lib/prisma";
 import { getVerticalInsightsSummary } from "@/lib/services/insightsService";
 import { ServiceVertical } from "@/enums/campaignEnums";
 
+export const dynamic = "force-dynamic";
+
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Auth ────────────────────────────────────────────────────────────────────
   const adminSecret = process.env.ADMIN_SECRET;
   if (!adminSecret) {
-    throw new Error("[admin/insights] ADMIN_SECRET env var is not set.");
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
   }
 
   const providedSecret = req.headers.get("x-admin-secret") ?? "";

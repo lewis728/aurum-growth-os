@@ -12,6 +12,8 @@ import {
   removeCustomDomain,
 } from "@/lib/services/vercelDomainService";
 
+export const dynamic = "force-dynamic";
+
 // ── Defaults ──────────────────────────────────────────────────────────────────
 const DEFAULTS = {
   agencyName:               "My Agency",

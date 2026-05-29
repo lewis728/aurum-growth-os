@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendDirectSMS } from "@/lib/services/twilioService";
 
+export const dynamic = "force-dynamic";
+
 const BATCH_SIZE = 50;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {

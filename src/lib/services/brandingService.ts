@@ -1,22 +1,10 @@
 // src/lib/services/brandingService.ts
 // Agency white-label branding service.
 // Available to ALL authenticated agency owners — no tier checks.
-
-
 import { prisma } from "@/lib/prisma";
 import type { AgencyBranding } from "@prisma/client";
 
-// Simple request-level cache (replaces React cache for server-side use)
-function cache<T extends (...args: unknown[]) => Promise<unknown>>(fn: T): T {
-  const map = new Map<string, ReturnType<T>>();
-  return ((...args: unknown[]) => {
-    const key = JSON.stringify(args);
-  }) as T;
-}
-
-
 // ── Validation helpers ────────────────────────────────────────────────
-
 const HEX_RE = /^[0-9A-Fa-f]{6}$/;
 const HOSTNAME_RE =
   /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
@@ -38,28 +26,25 @@ function validateHostname(value: string): void {
 }
 
 // ── getBranding ───────────────────────────────────────────────────────
-// Cached per React render tree — safe to call multiple times in one request.
 // Returns null if no branding configured (caller uses Aurum defaults).
 // NEVER throws.
-
-export const getBranding = cache(
-  async (tenantId: string): Promise<AgencyBranding | null> => {
-    try {
-      return await prisma.agencyBranding.findUnique({
-        where: { tenantId },
-      });
-    } catch (err) {
-      console.warn("[brandingService] getBranding failed:", err);
-      return null;
-    }
+export async function getBranding(
+  tenantId: string
+): Promise<AgencyBranding | null> {
+  try {
+    return await prisma.agencyBranding.findUnique({
+      where: { tenantId },
+    });
+  } catch (err) {
+    console.warn("[brandingService] getBranding failed:", err);
+    return null;
   }
-);
+}
 
 // ── getBrandingByDomain ───────────────────────────────────────────────
 // Used by middleware to resolve custom domains to tenantId.
 // Returns null if domain not found.
 // NEVER throws.
-
 export async function getBrandingByDomain(
   domain: string
 ): Promise<AgencyBranding | null> {
@@ -76,7 +61,6 @@ export async function getBrandingByDomain(
 // ── updateBranding ────────────────────────────────────────────────────
 // Validates colours and domain format, then upserts the AgencyBranding row.
 // Throws with descriptive messages on validation failure.
-
 export type BrandingUpdateData = Partial<
   Omit<AgencyBranding, "id" | "tenantId" | "createdAt" | "updatedAt">
 >;
@@ -85,19 +69,15 @@ export async function updateBranding(
   tenantId: string,
   data: BrandingUpdateData
 ): Promise<AgencyBranding> {
-  // Validate colours if provided
   if (data.primaryColour !== undefined) {
     validateHex(data.primaryColour, "primaryColour");
   }
   if (data.accentColour !== undefined) {
     validateHex(data.accentColour, "accentColour");
   }
-
-  // Validate custom domain format if provided
   if (data.customDomain !== undefined && data.customDomain !== null) {
     validateHostname(data.customDomain);
   }
-
   try {
     return await prisma.agencyBranding.upsert({
       where: { tenantId },

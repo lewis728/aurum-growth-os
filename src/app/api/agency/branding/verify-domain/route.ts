@@ -7,6 +7,8 @@ import { getTenantId } from "@/lib/auth";
 import { getBranding } from "@/lib/services/brandingService";
 import { verifyDomain } from "@/lib/services/vercelDomainService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(): Promise<NextResponse> {
   let tenantId: string;
   try {

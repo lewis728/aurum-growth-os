@@ -27,6 +27,8 @@ import { prisma } from "@/lib/prisma";
 import { encryptToken } from "@/lib/services/metaAuthService";
 import { CalendarProvider } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const CALENDLY_TOKEN_URL = "https://auth.calendly.com/oauth/token";
 const CALENDLY_API_BASE = "https://api.calendly.com";
 

@@ -14,6 +14,8 @@ import { prisma }      from "@/lib/prisma";
 import type { CallAnalysis }     from "@/types/voiceLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
 
+export const dynamic = "force-dynamic";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface HeroMetrics {

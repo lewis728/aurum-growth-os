@@ -11,6 +11,8 @@ import { getTenantId }   from "@/lib/auth";
 import { prisma }        from "@/lib/prisma";
 import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
 
+export const dynamic = "force-dynamic";
+
 // ─── POST /api/campaigns ─────────────────────────────────────────────────────
 // Placeholder for future direct blueprint creation endpoint.
 // Currently blueprints are created via /api/onboarding/chat.

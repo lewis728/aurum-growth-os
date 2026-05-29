@@ -27,6 +27,8 @@ import { CampaignHealthGrid } from "@/components/dashboard/CampaignHealthGrid";
 import { SpendChart }        from "@/components/dashboard/SpendChart";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 
+export const dynamic = "force-dynamic";
+
 // ── Aurum wordmark ─────────────────────────────────────────────────────────────
 function AurumWordmark(): JSX.Element {
   return (

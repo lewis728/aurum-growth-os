@@ -26,6 +26,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getTenantId } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const META_OAUTH_BASE = "https://www.facebook.com/v19.0/dialog/oauth";
 
 const REQUIRED_SCOPES = [
@@ -60,7 +62,7 @@ function getClerkSecretKey(): string {
  * The signature is HMAC-SHA256(tenantId + ":" + issuedAt, CLERK_SECRET_KEY).
  * The callback route verifies the signature before processing the OAuth code.
  */
-export function buildStateToken(tenantId: string): string {
+function buildStateToken(tenantId: string): string {
   const key = getClerkSecretKey();
   const issuedAt = Date.now().toString();
   const message = `${tenantId}:${issuedAt}`;

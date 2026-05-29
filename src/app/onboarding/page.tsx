@@ -14,6 +14,8 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import OnboardingChat from "@/components/onboarding/OnboardingChat";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Set up your client — Aurum",
   description: "Set up your first client campaign in under two minutes.",

@@ -21,6 +21,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateVerticalProfile, getVerticalProfile } from "@/lib/services/verticalLibraryService";
 import { ServiceVertical } from "@/enums/campaignEnums";
 
+export const dynamic = "force-dynamic";
+
 // ── Verticals to Seed ─────────────────────────────────────────────────────────
 
 interface SeedTarget {
@@ -113,20 +115,6 @@ const SEED_TARGETS: SeedTarget[] = [
   },
 ];
 
-// ── Custom Verticals Record (for reference) ───────────────────────────────────
-
-export const CUSTOM_VERTICALS: Record<string, string> = {
-  GENERAL_FITNESS_PT: "Personal Trainer",
-  GENERAL_FITNESS_GYM: "Gym / Fitness Studio",
-  GENERAL_REAL_ESTATE_BUYER: "Estate Agent — Buyer",
-  GENERAL_REAL_ESTATE_SELLER: "Estate Agent — Seller",
-  GENERAL_DENTAL_COSMETIC: "Cosmetic Dentistry",
-  GENERAL_DENTAL_GENERAL: "General Dentistry",
-  GENERAL_BAKERY: "Bakery",
-  GENERAL_PLUMBER: "Plumber",
-  GENERAL_ACCOUNTANT: "Accountant",
-  GENERAL_WEDDING_PHOTOGRAPHER: "Wedding Photographer",
-};
 
 // ── Seed Result Type ──────────────────────────────────────────────────────────
 

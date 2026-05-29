@@ -24,6 +24,8 @@ import type { DeploymentLayer }       from "@/types/deploymentLayer";
 import type { CampaignBlueprint, OrchestratorEvent } from "@/types/campaignBlueprint";
 import { ServiceVertical, CampaignStatus } from "@/enums/campaignEnums";
 
+export const dynamic = "force-dynamic";
+
 // ── PATCH body schema ─────────────────────────────────────────────────────────
 
 const PatchBodySchema = z.object({

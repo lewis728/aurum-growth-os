@@ -9,6 +9,8 @@ import { auth } from "@clerk/nextjs/server";
 import { getBranding } from "@/lib/services/brandingService";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 const inter = Inter({
   subsets:  ["latin"],
   variable: "--font-inter",

@@ -19,6 +19,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantId } from "@/lib/auth";
 import { uploadCreativeAsset } from "@/lib/services/storageService";
 
+export const dynamic = "force-dynamic";
+
 // ── Accepted MIME types (mirrored from storageService for early rejection) ────
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

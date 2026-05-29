@@ -7,6 +7,8 @@ import { auth } from "@clerk/nextjs/server";
 import { getTenantId } from "@/lib/auth";
 import { getSubscriptionStatus } from "@/lib/services/stripeService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(): Promise<NextResponse> {
   const { userId } = await auth();
   if (!userId) {

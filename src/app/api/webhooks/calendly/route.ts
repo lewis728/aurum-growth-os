@@ -27,6 +27,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // ── Environment Guard ─────────────────────────────────────────────────────────
 
 function getCalendlyWebhookSecret(): string {

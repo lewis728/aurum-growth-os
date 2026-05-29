@@ -37,6 +37,8 @@ import type { VoiceLayer } from "@/types/voiceLayer";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { CRMLayer } from "@/types/crmLayer";
 
+export const dynamic = "force-dynamic";
+
 // ── Request Schema ────────────────────────────────────────────────────────────
 
 const ChatMessageSchema = z.object({

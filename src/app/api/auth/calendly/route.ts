@@ -21,6 +21,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getTenantId } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const CALENDLY_OAUTH_BASE = "https://auth.calendly.com/oauth/authorize";
 
 // ── Environment Guards ────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ function getClerkSecretKey(): string {
 
 // ── CSRF State Token ──────────────────────────────────────────────────────────
 
-export function buildCalendlyStateToken(tenantId: string): string {
+function buildCalendlyStateToken(tenantId: string): string {
   const key = getClerkSecretKey();
   const issuedAt = Date.now().toString();
   const message = `${tenantId}:${issuedAt}`;

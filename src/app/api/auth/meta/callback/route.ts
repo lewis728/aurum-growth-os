@@ -27,6 +27,8 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { encryptToken } from "@/lib/services/metaAuthService";
 
+export const dynamic = "force-dynamic";
+
 const META_GRAPH_API_BASE = "https://graph.facebook.com/v19.0";
 
 // ── State token max age: 10 minutes ──────────────────────────────────────────

@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateAndCreateSpendFee } from "@/lib/services/stripeService";
 
+export const dynamic = "force-dynamic";
+
 function getPeriodMonth(): string {
   // Run on the 1st — bill for the PREVIOUS month
   const now = new Date();

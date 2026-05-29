@@ -15,6 +15,8 @@ import { NextResponse } from "next/server";
 import { getTenantId } from "@/lib/auth";
 import { getMetaConnectionStatus } from "@/lib/services/metaAuthService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(): Promise<NextResponse> {
   let tenantId: string;
   try {

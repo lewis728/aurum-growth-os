@@ -13,6 +13,8 @@ import { CampaignStatus }            from "@/enums/campaignEnums";
 import { removeClientSeat }          from "@/lib/services/stripeService";
 import { z }                         from "zod";
 
+export const dynamic = "force-dynamic";
+
 const BodySchema = z.object({
   action: z.enum(["pause", "resume", "archive"]),
 });

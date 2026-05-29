@@ -23,6 +23,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getTenantId } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const GOOGLE_OAUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
@@ -47,7 +49,7 @@ function getClerkSecretKey(): string {
  * Format: base64url-encoded JSON { tenantId, issuedAt, signature }
  * Signature: HMAC-SHA256(tenantId + ":" + issuedAt, CLERK_SECRET_KEY)
  */
-export function buildGoogleStateToken(tenantId: string): string {
+function buildGoogleStateToken(tenantId: string): string {
   const key = getClerkSecretKey();
   const issuedAt = Date.now().toString();
   const message = `${tenantId}:${issuedAt}`;

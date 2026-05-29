@@ -9,6 +9,8 @@ import { getTenantId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createBillingPortalSession } from "@/lib/services/stripeService";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const { userId } = await auth();
   if (!userId) {

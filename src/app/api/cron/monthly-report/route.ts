@@ -14,6 +14,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateReportsForAllTenants } from "@/lib/cron/monthlyReportGenerator";
 
+export const dynamic = "force-dynamic";
+
 // ── Previous month helper ─────────────────────────────────────────────────────
 function previousMonth(): { month: number; year: number } {
   const now   = new Date();

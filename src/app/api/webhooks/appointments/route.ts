@@ -13,6 +13,8 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createCalendarEvent } from "@/lib/services/calendarService";
 
+export const dynamic = "force-dynamic";
+
 function validateSignature(rawBody: string, signatureHeader: string): boolean {
   const secret = process.env.APPOINTMENTS_WEBHOOK_SECRET;
   if (!secret) {

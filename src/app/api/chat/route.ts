@@ -30,6 +30,8 @@ import {
   LeadFormFieldEnum,
 } from "@/enums/campaignEnums";
 
+export const dynamic = "force-dynamic";
+
 // ── Runtime guard ─────────────────────────────────────────────────────────────
 if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is not configured.");

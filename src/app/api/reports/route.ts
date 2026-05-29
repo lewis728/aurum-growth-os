@@ -16,6 +16,8 @@ import { getTenantId } from "@/lib/auth";
 import { validateStripeMandate } from "@/lib/services/stripeService";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Auth ──────────────────────────────────────────────────────────────────
   let tenantId: string;

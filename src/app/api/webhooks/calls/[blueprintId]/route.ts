@@ -16,6 +16,8 @@ import { prisma } from "@/lib/prisma";
 import { queueAppointmentReminders } from "@/lib/services/twilioService";
 import type { LeadStatus } from "@/types/lead";
 
+export const dynamic = "force-dynamic";
+
 // ── HMAC validation ───────────────────────────────────────────────────────────
 function validateRetellSignature(rawBody: string, signatureHeader: string): boolean {
   const secret = process.env.RETELL_WEBHOOK_SECRET;

@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { CampaignStatus } from "@/enums/campaignEnums";
 import type { OrchestratorEvent } from "@/types/campaignBlueprint";
 
+export const dynamic = "force-dynamic";
+
 const TERMINAL_STATUSES = new Set<string>([
   CampaignStatus.LIVE,
 

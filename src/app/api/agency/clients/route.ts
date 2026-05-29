@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { getTenantId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export interface ClientSummary {
   id:               string;
   businessName:     string;

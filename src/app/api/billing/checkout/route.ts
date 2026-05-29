@@ -11,6 +11,8 @@ import {
   createCheckoutSession,
 } from "@/lib/services/stripeService";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const { userId } = await auth();
   if (!userId) {
