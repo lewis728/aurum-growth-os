@@ -1,0 +1,309 @@
+// prisma/schema.prisma
+// Aurum Growth OS — Canonical Database Schema
+// Source of Truth: Master Implementation Guide Section 4.3
+// Seven models: CampaignBlueprint, Lead, Appointment, ScheduledReminder, CommandLog, MetaConnection, CalendarConnection
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── CampaignBlueprint ────────────────────────────────────────────────
+// Stores the full campaign configuration and orchestration state.
+// The five layer interfaces (CreativeLayer, MediaBuyingLayer, DeploymentLayer,
+// VoiceLayer, CRMLayer) are stored as Json columns and cast at the service layer.
+model CampaignBlueprint {
+  id               String   @id @default(cuid())
+  tenantId         String
+  status           String   // CampaignStatus enum stored as string
+  vertical         String   // ServiceVertical enum stored as string
+  businessName     String
+  targetLocation   String
+  dailyBudgetUsd   Float
+  creative         Json     // CreativeLayer
+  mediaBuying      Json     // MediaBuyingLayer
+  deployment       Json     // DeploymentLayer
+  voice            Json     // VoiceLayer
+  crm              Json     // CRMLayer
+  orchestrationLog Json     @default("[]") // OrchestratorEvent[]
+  aggregated       Boolean  @default(false)  // Set to true after performanceAggregator runs
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  leads            Lead[]
+  appointments     Appointment[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+// ── Lead ─────────────────────────────────────────────────────────────
+// Created when a prospect fills the Meta landing page form.
+// automationEngine fires speed-to-lead SMS immediately on creation.
+model Lead {
+  id              String   @id @default(cuid())
+  blueprintId     String?
+  tenantId        String
+  firstName       String
+  lastName        String
+  phone           String
+  email           String?
+  status          String   @default("new") // LeadStatus enum stored as string
+  source          String   @default("landing_page") // landing_page | calendly | manual
+  callAnalysis    Json?    // CallAnalysis from Retell post-call webhook
+  formData        Json?    // Raw form fields from landing page
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  blueprint       CampaignBlueprint? @relation(fields: [blueprintId], references: [id])
+  appointment     Appointment?
+  @@index([blueprintId])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@unique([tenantId, email]) // For Calendly lead deduplication by email
+}
+
+// ── Appointment ──────────────────────────────────────────────────────
+// Created atomically with Lead.update({ status: "booked" }) via $transaction.
+// Returns 409 if a confirmed appointment already exists for this lead.
+model Appointment {
+  id              String   @id @default(cuid())
+  blueprintId     String?
+  leadId          String   @unique
+  tenantId        String
+  scheduledAt     DateTime
+  confirmed       Boolean  @default(false)
+  status          String   @default("confirmed") // AppointmentStatus: confirmed | cancelled | attended
+  notes           String?
+  calendlyEventId String?  @unique // Calendly scheduled event URI for deduplication
+  source          String   @default("retell") // retell | calendly | manual
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  blueprint       CampaignBlueprint?  @relation(fields: [blueprintId], references: [id])
+  lead            Lead               @relation(fields: [leadId], references: [id])
+  reminders       ScheduledReminder[]
+  @@index([blueprintId])
+  @@index([tenantId])
+  @@index([tenantId, scheduledAt])
+  @@index([calendlyEventId])
+}
+
+// ── ScheduledReminder ────────────────────────────────────────────────
+// Pre-rendered SMS reminders queued at appointment creation time.
+// messageBody is fully rendered at queue time — cron worker sends as-is (GR-08).
+// @@unique([appointmentId, messageType]) enforces idempotent queuing (GR-07).
+model ScheduledReminder {
+  id            String    @id @default(cuid())
+  appointmentId String
+  tenantId      String
+  messageType   String    // ReminderMessageType enum stored as string
+  messageBody   String    // Fully rendered SMS body — pre-rendered at queue time (GR-08)
+  toNumber      String    // E.164 format
+  sendAt        DateTime
+  sentAt        DateTime?
+  attempts      Int       @default(0)
+  status        String    @default("pending") // pending | sent | failed
+  createdAt     DateTime  @default(now())
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@unique([appointmentId, messageType])
+  @@index([status, sendAt])
+  @@index([tenantId])
+}
+
+// ── MetaConnection ──────────────────────────────────────────────────
+// Stores the tenant's Meta OAuth connection.
+// One row per tenant (@@unique on tenantId).
+// encryptedAccessToken is AES-256-CBC encrypted — NEVER stored as plaintext.
+// All Meta API calls must decrypt via metaAuthService.getMetaAccessToken(tenantId).
+model MetaConnection {
+  id                    String    @id @default(cuid())
+  tenantId              String    @unique
+  encryptedAccessToken  String    @db.Text  // AES-256-CBC encrypted
+  adAccountId           String    // e.g. "act_123456789"
+  pageId                String    // Facebook Page ID
+  pixelId               String    // Meta Pixel ID
+  instagramActorId      String?   // Optional Instagram actor ID
+  tokenExpiresAt        DateTime  // Long-lived tokens expire after ~60 days
+  connectedAt           DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([tenantId])
+}
+
+// ── CalendarConnection ──────────────────────────────────────────────
+// Stores the tenant's calendar OAuth connection (Google Calendar or Calendly).
+// One row per tenant (@@unique on tenantId).
+// encryptedToken is AES-256-CBC encrypted — NEVER stored as plaintext.
+// Provider abstraction: calendarService.ts reads provider and routes accordingly.
+enum CalendarProvider {
+  GOOGLE
+  CALENDLY
+}
+
+model CalendarConnection {
+  id             String           @id @default(cuid())
+  tenantId       String           @unique
+  provider       CalendarProvider
+  encryptedToken String           @db.Text  // AES-256-CBC encrypted access token
+  refreshToken   String?          @db.Text  // Encrypted refresh token (Google only)
+  calendarId     String           // Google: calendar ID; Calendly: user URI
+  connectedAt    DateTime         @default(now())
+  expiresAt      DateTime?        // Null for Calendly (long-lived tokens)
+  updatedAt      DateTime         @updatedAt
+
+  @@index([tenantId])
+}
+
+// ── VerticalProfile ─────────────────────────────────────────────────
+// Living database of niche intelligence. Grows with every new vertical.
+// Seeded with 20 profiles at launch; new verticals auto-generated via GPT-4o.
+model VerticalProfile {
+  id                        String   @id @default(cuid())
+  vertical                  String   @unique  // ServiceVertical enum value or GENERAL_[TYPE]
+  displayName               String
+  avgTransactionValueGbp    Float
+  purchaseTimelineDays      Int
+  conversionGoalType        String   // 'formbooking' | 'phonecall' | 'walkin'
+  cplBenchmarkGbp           Float
+  cplBenchmarkUsd           Float
+  creativeStyle             String
+  audienceNotes             String
+  targetingRecommendations  String
+  bidStrategyNotes          String
+  offerStructure            String
+  callScriptNotes           String
+  performanceData           Json     @default("{}")
+  lastUpdated               DateTime @updatedAt
+
+  @@index([vertical])
+}
+
+// ── AgencyBranding ─────────────────────────────────────────────────
+// White-label branding configuration for each agency owner.
+// Available to ALL authenticated agency owners on active/trialing subscriptions.
+model AgencyBranding {
+  id                       String    @id @default(cuid())
+  tenantId                 String    @unique
+  agencyName               String
+  logoUrl                  String?
+  primaryColour            String    @default("C9A84C")  // hex, no #
+  accentColour             String    @default("FFFFFF")
+  customDomain             String?   @unique
+  supportEmail             String?
+  fromName                 String?
+  onboardingWelcomeMessage String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([customDomain])
+}
+
+// ── AgencySubscription ─────────────────────────────────────────────
+// Per-seat billing model. One row per tenant.
+// Platform access: £97/month base fee.
+// Client seats: £500/month per active CampaignBlueprint.
+// Seat count managed by addClientSeat() / removeClientSeat() in stripeService.ts.
+model AgencySubscription {
+  id                    String    @id @default(cuid())
+  tenantId              String    @unique
+  stripeCustomerId      String    @unique
+  stripeSubscriptionId  String    @unique
+  status                String    // active | trialing | past_due | canceled
+  platformPriceId       String
+  seatPriceId           String
+  currentSeatCount      Int       @default(0)
+  trialEndsAt           DateTime?
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([stripeCustomerId])
+}
+
+// ── SpendFeeRecord ───────────────────────────────────────────────────
+// Monthly 5% ad spend management fee.
+// Created on the 1st of each month by the spend-fee cron job.
+// @@unique([tenantId, periodMonth]) prevents double-charging.
+model SpendFeeRecord {
+  id              String    @id @default(cuid())
+  tenantId        String
+  periodMonth     String    // "2026-01" format
+  totalSpendGbp   Float
+  feeGbp          Float     // 5% of totalSpendGbp
+  stripeInvoiceId String?
+  status          String    @default("pending") // pending | invoiced | paid
+  createdAt       DateTime  @default(now())
+
+  @@unique([tenantId, periodMonth])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// ── CommandLog ───────────────────────────────────────────────────────
+// Append-only audit log of every user command processed by intentProcessor.
+// logEvent() wraps all writes in try/catch and fails silently (GR-12).
+model CommandLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  rawInput    String   @db.Text
+  intentType  String   // ClassifiedIntent type stored as string
+  blueprintId String?  // Populated when intent results in a campaign action
+  success     Boolean
+  errorMsg    String?
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+}
+// ── MonthlyReport ────────────────────────────────────────────────────
+// Generated on the 1st of each month for every active/trialing agency owner.
+// Stores the email-safe HTML and raw metrics payload.
+// @@unique([tenantId, month, year]) prevents duplicate generation.
+model MonthlyReport {
+  id          String    @id @default(cuid())
+  tenantId    String
+  month       Int       // 1–12
+  year        Int
+  reportHtml  String    @db.Text // email-safe inline-styled HTML
+  reportData  Json      // raw metrics payload used to generate report
+  generatedAt DateTime  @default(now())
+  emailedAt   DateTime?
+
+  @@unique([tenantId, month, year])
+  @@index([tenantId])
+}
+
+// ── AIRepresentative ─────────────────────────────────────────────────────────
+// One per CampaignBlueprint. Scoped by blueprintId.
+// The agency owner configures this for each client campaign.
+
+enum RepresentativePersonality {
+  PROFESSIONAL
+  WARM
+  DIRECT
+  CONSULTATIVE
+}
+
+model AIRepresentative {
+  id                      String                    @id @default(cuid())
+  blueprintId             String                    @unique
+  tenantId                String
+  repName                 String
+  personality             RepresentativePersonality @default(PROFESSIONAL)
+  customIntroLine         String?
+  customObjectionResponses Json                     @default("{}")
+  voiceId                 String?
+  lastDeployedAt          DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  @@index([tenantId])
+  @@index([blueprintId])
+}
