@@ -50,12 +50,15 @@ export default async function DashboardLayout({
     redirect("/setup-org");
   }
 
-  // ── Guard 2: has org but no blueprints → onboarding ──────────────────────
+  // ── Guard 2: has org but no AgencyProfile → onboarding ─────────────────────
+  // AgencyProfile is saved at the end of onboarding (not CampaignBlueprint).
+  // Blueprints are created later in the Add Client flow.
   if (orgId) {
-    const blueprintCount = await prisma.campaignBlueprint.count({
+    const agencyProfile = await prisma.agencyProfile.findUnique({
       where: { tenantId: orgId },
+      select: { id: true },
     });
-    if (blueprintCount === 0) {
+    if (!agencyProfile) {
       redirect("/onboarding");
     }
   }
