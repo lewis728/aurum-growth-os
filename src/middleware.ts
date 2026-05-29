@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -12,8 +13,21 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware((auth, req) => {
+  const url = req.nextUrl.pathname;
+  console.log(`[middleware] ${url} | public=${isPublicRoute(req)}`);
+  
   if (!isPublicRoute(req)) {
-    auth().protect();
+    try {
+      const authObj = auth();
+      console.log(`[middleware] userId=${authObj.userId} | protecting...`);
+      authObj.protect();
+      console.log(`[middleware] protect() passed`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[middleware] protect() threw: ${msg.slice(0, 100)}`);
+      // Re-throw so Clerk can handle the redirect
+      throw e;
+    }
   }
 });
 
