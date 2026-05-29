@@ -12,10 +12,8 @@
  */
 import { useEffect, useState } from "react";
 import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
 
 export default function SetupOrgPage() {
-  const router = useRouter();
   const { user, isLoaded: userLoaded } = useUser();
   const { organization } = useOrganization();
   const { setActive, isLoaded: orgListLoaded } = useOrganizationList();
@@ -25,15 +23,16 @@ export default function SetupOrgPage() {
   useEffect(() => {
     if (!userLoaded || !orgListLoaded) return;
 
-    // If user already has an active org, go straight to onboarding
+    // If user already has an active org, force a full reload to /onboarding
+    // so the server receives a fresh JWT with orgId already set.
     if (organization) {
-      router.replace("/onboarding");
+      window.location.href = "/onboarding";
       return;
     }
 
     // If not signed in, go to sign-in
     if (!user) {
-      router.replace("/sign-in");
+      window.location.href = "/sign-in";
       return;
     }
 
@@ -63,10 +62,10 @@ export default function SetupOrgPage() {
 
         setStatus("done");
 
-        // Small delay to let the session token propagate, then go to onboarding
-        setTimeout(() => {
-          router.replace("/onboarding");
-        }, 500);
+        // Hard browser redirect — forces Clerk to issue a fresh HTTP-only JWT
+        // cookie containing the new orgId before any server request is made.
+        // A client-side router.push() does NOT re-issue the cookie.
+        window.location.href = "/onboarding";
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[setup-org]", msg);
