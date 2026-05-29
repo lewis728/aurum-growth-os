@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/webhooks/(.*)",
   "/api/cron/(.*)",
+  "/api/debug(.*)",
 ]);
 
 const isChatRoute = createRouteMatcher(["/api/chat"]);
