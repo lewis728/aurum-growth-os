@@ -367,7 +367,7 @@ function DashboardView() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <KpiStrip data={data as Record<string, unknown>} isLoading={isLoading} />
+          <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
 
           <div>
             <div className="flex items-center justify-between mb-2.5">
