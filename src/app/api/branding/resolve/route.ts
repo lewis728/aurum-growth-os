@@ -5,6 +5,7 @@
  * This route runs in the Node.js runtime and can safely use Prisma.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { getBrandingByDomain } from "@/lib/services/brandingService";
 
 export const dynamic = "force-dynamic";

@@ -3,10 +3,10 @@
 // PATCH — updates branding config; requires active/trialing subscription
 
 import { NextResponse, type NextRequest } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { z } from "zod";
 import { getBranding, updateBranding } from "@/lib/services/brandingService";
 import { validateStripeMandate } from "@/lib/services/stripeService";
+import { auth } from "@clerk/nextjs/server";
 import {
   addCustomDomain,
   removeCustomDomain,
@@ -40,12 +40,9 @@ const PatchSchema = z.object({
 
 // ── GET ───────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const branding = await getBranding(tenantId);
 
@@ -55,12 +52,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // Subscription mandate check
   const mandateOk = await validateStripeMandate(tenantId);

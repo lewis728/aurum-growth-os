@@ -7,11 +7,11 @@
  * Returns the updated blueprint row.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma }                    from "@/lib/prisma";
 import { CampaignStatus }            from "@/enums/campaignEnums";
 import { removeClientSeat }          from "@/lib/services/stripeService";
 import { z }                         from "zod";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +24,9 @@ export async function PATCH(
   { params }: { params: { blueprintId: string } }
 ): Promise<NextResponse> {
   // ── Auth ────────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(request);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { orgId: _orgId } = await auth();
+  if (!_orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = _orgId;
 
   // ── Validate body ───────────────────────────────────────────────────────────
   let body: z.infer<typeof BodySchema>;

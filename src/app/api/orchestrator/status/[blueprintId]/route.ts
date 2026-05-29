@@ -9,10 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma } from "@/lib/prisma";
 import { CampaignStatus } from "@/enums/campaignEnums";
 import type { OrchestratorEvent } from "@/types/campaignBlueprint";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -34,12 +34,9 @@ export async function GET(
   { params }: { params: { blueprintId: string } }
 ): Promise<Response> {
   // ── 1. Auth ──────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const { blueprintId } = params;
 

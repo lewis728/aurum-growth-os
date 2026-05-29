@@ -11,8 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
-import { clerkClient } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import OpenAI from "openai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -70,12 +69,9 @@ function sseEvent(data: Record<string, unknown>): string {
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ──────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // ── 2. Fetch organisation name ──────────────────────────────────────────────
   let tenantName = "your agency";

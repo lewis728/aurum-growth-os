@@ -23,6 +23,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { encryptToken } from "@/lib/services/metaAuthService";

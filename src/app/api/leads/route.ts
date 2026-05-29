@@ -7,18 +7,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma }                    from "@/lib/prisma";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(request);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { orgId: _orgId } = await auth();
+  if (!_orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const tenantId = _orgId;
 
   const blueprintId = request.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {

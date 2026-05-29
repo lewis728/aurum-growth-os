@@ -8,11 +8,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { Prisma }       from "@prisma/client";
 import { prisma }      from "@/lib/prisma";
 import type { CallAnalysis }     from "@/types/voiceLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -123,12 +123,9 @@ function getMetaCampaignId(mediaBuying: unknown): string | null {
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const { searchParams } = new URL(req.url);
   const blueprintIdFilter = searchParams.get("blueprintId") ?? undefined;

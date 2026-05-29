@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createCalendarEvent } from "@/lib/services/calendarService";

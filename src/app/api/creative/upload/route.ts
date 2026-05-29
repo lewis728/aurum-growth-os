@@ -14,9 +14,9 @@
  *   415 { error: string }
  *   502 { error: string }
  */
+import { auth } from "@clerk/nextjs/server";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { uploadCreativeAsset } from "@/lib/services/storageService";
 
 export const dynamic = "force-dynamic";
@@ -45,12 +45,9 @@ const ACCEPTED_TYPES = new Set([
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // ── 2. Parse multipart/form-data ───────────────────────────────────────────
   let formData: FormData;

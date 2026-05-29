@@ -7,9 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma }        from "@/lib/prisma";
 import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +18,9 @@ export const dynamic = "force-dynamic";
 // Currently blueprints are created via /api/onboarding/chat.
 // Guard is here so any future POST is protected from the start.
 export async function POST(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const access = await canLaunchCampaign(tenantId);
   if (!access.allowed) {
@@ -36,12 +33,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> { // eslint-
 
 // ─── GET /api/campaigns ───────────────────────────────────────────────────────
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   try {
     const blueprints = await prisma.campaignBlueprint.findMany({

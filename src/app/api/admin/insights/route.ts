@@ -8,6 +8,7 @@
 // Returns: VerticalInsightsSummary[] for all verticals with sampleSize > 0.
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { getVerticalInsightsSummary } from "@/lib/services/insightsService";
 import { ServiceVertical } from "@/enums/campaignEnums";

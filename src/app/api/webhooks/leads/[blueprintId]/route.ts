@@ -8,6 +8,7 @@
  * - NEVER throws — all errors return appropriate HTTP status
  */
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";

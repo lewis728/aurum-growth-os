@@ -12,20 +12,17 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerTenantId } from "@/lib/serverAuth";
 import { validateStripeMandate } from "@/lib/services/stripeService";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // ── Subscription mandate ──────────────────────────────────────────────────
   const mandateOk = await validateStripeMandate(tenantId);

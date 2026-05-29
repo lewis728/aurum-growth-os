@@ -21,9 +21,9 @@
  *  404 { error: string }
  *  502 { error: string }
  */
+import { auth } from "@clerk/nextjs/server";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { updateCampaignBudget } from "@/lib/services/metaAdsService";
@@ -72,12 +72,9 @@ export async function PATCH(
   { params }: { params: { blueprintId: string } }
 ): Promise<NextResponse> {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const { blueprintId } = params;
 

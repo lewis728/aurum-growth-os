@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { generateReportsForAllTenants } from "@/lib/cron/monthlyReportGenerator";
 
 export const dynamic = "force-dynamic";

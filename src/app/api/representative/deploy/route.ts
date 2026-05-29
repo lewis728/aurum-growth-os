@@ -6,7 +6,6 @@
 // re-deployments from the dashboard.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerTenantId } from "@/lib/serverAuth";
 import { z }                          from "zod";
 import { prisma }                     from "@/lib/prisma";
 import { validateStripeMandate }      from "@/lib/services/stripeService";
@@ -19,6 +18,7 @@ import type { MediaBuyingLayer }      from "@/types/mediaBuyingLayer";
 import type { DeploymentLayer }       from "@/types/deploymentLayer";
 import type { CampaignBlueprint, OrchestratorEvent } from "@/types/campaignBlueprint";
 import { ServiceVertical, CampaignStatus } from "@/enums/campaignEnums";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -69,12 +69,9 @@ function buildBlueprintFromRow(row: {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Auth ────────────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // ── Subscription guard ──────────────────────────────────────────────────────
   const hasMandate = await validateStripeMandate(tenantId);

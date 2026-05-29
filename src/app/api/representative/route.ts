@@ -9,7 +9,6 @@
 //         If Retell deploy fails: logs to CommandLog but still returns the saved record.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerTenantId } from "@/lib/serverAuth";
 import { z }                          from "zod";
 import { prisma }                     from "@/lib/prisma";
 import { validateStripeMandate }      from "@/lib/services/stripeService";
@@ -23,6 +22,7 @@ import type { MediaBuyingLayer }      from "@/types/mediaBuyingLayer";
 import type { DeploymentLayer }       from "@/types/deploymentLayer";
 import type { CampaignBlueprint, OrchestratorEvent } from "@/types/campaignBlueprint";
 import { ServiceVertical, CampaignStatus } from "@/enums/campaignEnums";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -83,12 +83,9 @@ function buildBlueprintFromRow(row: {
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   const blueprintId = req.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {
@@ -114,12 +111,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // Subscription guard
   const hasMandate = await validateStripeMandate(tenantId);

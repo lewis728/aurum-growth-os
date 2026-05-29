@@ -17,11 +17,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { addClientSeat } from "@/lib/services/stripeService";
 import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
+import { auth } from "@clerk/nextjs/server";
 import {
   runOnboardingConversation,
   WELCOME_MESSAGE,
@@ -83,12 +83,9 @@ async function* streamText(
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ───────────────────────────────────────────────────────────────
-  let tenantId: string;
-  try {
-    tenantId = await getServerTenantId(req);
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
 
   // ── 2. Subscription access check ─────────────────────────────────────────
   const access = await canLaunchCampaign(tenantId);
@@ -244,7 +241,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   // Auth check
   try {
-    await getServerTenantId(req);
+    await auth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

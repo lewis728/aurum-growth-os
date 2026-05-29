@@ -4,19 +4,21 @@
  * Returns { url } — frontend opens in a new tab.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { prisma } from "@/lib/prisma";
 import { createBillingPortalSession } from "@/lib/services/stripeService";
+import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { userId } = await getServerAuth(req);
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const tenantId = await getServerTenantId(req);
+  const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
   if (!tenantId) {
     return NextResponse.json({ error: "No organisation found" }, { status: 400 });
   }

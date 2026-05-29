@@ -12,8 +12,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClerkClient } from "@clerk/backend";
-import { getServerAuth } from "@/lib/serverAuth";
-
+import { auth } from "@clerk/nextjs/server";
 export const dynamic = "force-dynamic";
 
 const clerkClient = createClerkClient({
@@ -23,7 +22,7 @@ const clerkClient = createClerkClient({
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const { userId, orgId } = await getServerAuth(req);
+    const { userId, orgId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

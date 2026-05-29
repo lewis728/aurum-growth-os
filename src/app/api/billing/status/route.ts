@@ -3,19 +3,15 @@
  * Returns the tenant's subscription status without exposing Stripe IDs.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getServerAuth, getServerTenantId } from "@/lib/serverAuth";
 import { getSubscriptionStatus } from "@/lib/services/stripeService";
+import { auth } from "@clerk/nextjs/server";
 export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const { userId } = await getServerAuth(req);
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const tenantId = await getServerTenantId(req);
-    if (!tenantId) {
-      return NextResponse.json({ error: "No organisation found" }, { status: 400 });
-    }
+    const { orgId } = await auth();
+    console.log('[billing/status] orgId from auth():', orgId);
+    if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    const tenantId = orgId;
     const status = await getSubscriptionStatus(tenantId);
     if (!status) {
       return NextResponse.json({

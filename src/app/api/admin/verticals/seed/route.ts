@@ -18,6 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { generateVerticalProfile, getVerticalProfile } from "@/lib/services/verticalLibraryService";
 import { ServiceVertical } from "@/enums/campaignEnums";
 

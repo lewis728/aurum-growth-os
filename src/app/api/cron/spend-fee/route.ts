@@ -8,6 +8,7 @@
  * Idempotent — SpendFeeRecord @@unique([tenantId, periodMonth]) prevents double-charging.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { calculateAndCreateSpendFee } from "@/lib/services/stripeService";
 

@@ -6,6 +6,7 @@
 // Always returns 200 — never fails the cron endpoint.
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { runWeeklyAggregation } from "@/lib/cron/performanceAggregator";
 
 export const dynamic = "force-dynamic";

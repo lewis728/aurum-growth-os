@@ -4,12 +4,14 @@
 // This file will be deleted after Stage 03 is confirmed complete.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerTenantId } from "@/lib/serverAuth";
+import { auth } from "@clerk/nextjs/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   try {
-    const tenantId = await getServerTenantId(req);
+    const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId;
     return NextResponse.json({ tenantId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
