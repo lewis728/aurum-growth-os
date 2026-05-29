@@ -3,9 +3,13 @@
  * Dashboard route group layout — white background wrapper.
  * All routes under (dashboard)/ inherit this layout.
  *
- * Onboarding guard: if the authenticated tenant has no blueprints,
- * redirect to /onboarding. This ensures first-time agency owners always
- * complete the client setup flow before accessing the dashboard.
+ * Guards (evaluated before rendering):
+ *   1. Signed in but no org  → redirect to /setup-org
+ *   2. Has org but no blueprints → redirect to /onboarding
+ *
+ * IMPORTANT: redirect() calls must be OUTSIDE the try/catch that wraps auth().
+ * In Next.js 14, redirect() throws an internal signal that is NOT an Error
+ * instance — catching it and not re-throwing silently swallows the redirect.
  */
 
 import { redirect } from "next/navigation";
@@ -18,34 +22,33 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ── Auth + onboarding guards ─────────────────────────────────────────────
-  // Guard 1: signed in but no org → create one first
-  // Guard 2: has org but no blueprints → complete onboarding
+  // ── Read auth state — gracefully handle unavailable Clerk context ──────────
+  let userId: string | null = null;
+  let orgId: string | null = null;
+
   try {
-    const { userId, orgId } = await auth();
+    const authResult = await auth();
+    userId = authResult.userId ?? null;
+    orgId = authResult.orgId ?? null;
+  } catch {
+    // auth() threw — Clerk context unavailable (e.g. unauthenticated edge case).
+    // Fall through: page-level SignedIn/SignedOut guards handle auth state.
+  }
 
-    // Signed in but no organisation yet — auto-create one on /setup-org
-    if (userId && !orgId) {
-      redirect("/setup-org");
-    }
+  // ── Guard 1: signed in but no organisation yet ────────────────────────────
+  // redirect() is OUTSIDE the try/catch so its internal throw propagates.
+  if (userId && !orgId) {
+    redirect("/setup-org");
+  }
 
-    if (orgId) {
-      const blueprintCount = await prisma.campaignBlueprint.count({
-        where: { tenantId: orgId },
-      });
-      if (blueprintCount === 0) {
-        redirect("/onboarding");
-      }
+  // ── Guard 2: has org but no blueprints → onboarding ──────────────────────
+  if (orgId) {
+    const blueprintCount = await prisma.campaignBlueprint.count({
+      where: { tenantId: orgId },
+    });
+    if (blueprintCount === 0) {
+      redirect("/onboarding");
     }
-  } catch (err) {
-    // Re-throw Next.js redirect signals — they must propagate
-    if (
-      err instanceof Error &&
-      (err.message === "NEXT_REDIRECT" || (err as { digest?: string }).digest?.startsWith("NEXT_REDIRECT"))
-    ) {
-      throw err;
-    }
-    // auth() threw for another reason — fall through gracefully
   }
 
   return (
