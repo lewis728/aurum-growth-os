@@ -99,7 +99,7 @@ async function gatherBlueprintData(
   let metaLeads:       number | null = null;
   let metaCplGbp:      number | null = null;
   let metaCtr:         number | null = null;
-  let topCreativeName: string | null = null;
+  const topCreativeName: string | null = null;
 
   try {
     const mb = mediaBuying as MediaBuyingLayer | null;

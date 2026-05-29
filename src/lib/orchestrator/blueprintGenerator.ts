@@ -20,7 +20,6 @@ import {
   ServiceVertical,
   CampaignStatus,
   AdObjective,
-  CreativeFormat,
   LeadFormFieldEnum,
   WebhookEvent,
 } from "@/enums/campaignEnums";

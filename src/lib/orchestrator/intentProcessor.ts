@@ -216,6 +216,7 @@ async function logEvent(
 
 async function classifyIntent(
   rawInput: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _tenantId: string
 ): Promise<ClassifiedIntent> {
   const response = await withRetry(
@@ -265,6 +266,7 @@ async function classifyIntent(
 
 async function handleCreativeGeneration(
   entities: IntentEntities,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _tenantId: string
 ): Promise<OrchestratorResponse> {
   const prompt = entities.creativePrompt ?? "Professional marketing creative for local service business";
@@ -757,6 +759,7 @@ async function handleLeadManagement(
 async function handleGeneralQuery(
   rawInput:  string,
   history:   ConversationMessage[],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _tenantId: string
 ): Promise<OrchestratorResponse> {
   const systemPrompt =

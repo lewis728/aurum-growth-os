@@ -28,10 +28,13 @@ import {
 } from "@/lib/orchestrator/onboardingEngine";
 import { CampaignStatus } from "@/enums/campaignEnums";
 import type { ChatMessage } from "@/lib/orchestrator/intentProcessor";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { CreativeLayer } from "@/types/creativeLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
 import type { DeploymentLayer } from "@/types/deploymentLayer";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { VoiceLayer } from "@/types/voiceLayer";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { CRMLayer } from "@/types/crmLayer";
 
 // ── Request Schema ────────────────────────────────────────────────────────────
@@ -236,7 +239,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
 // ── GET — returns the welcome message and initial state ───────────────────────
 
-export async function GET(req: NextRequest): Promise<NextResponse> {
+export async function GET(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   // Auth check
   try {
     await getTenantId();

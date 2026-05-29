@@ -93,7 +93,7 @@ export default clerkMiddleware(async (auth, req) => {
   const requestHostname = extractHostname(req);
   const appHostname = extractAppHostname();
 
-  let resolvedHeaders: Record<string, string> = {};
+  const resolvedHeaders: Record<string, string> = {};
 
   if (requestHostname && appHostname && requestHostname !== appHostname) {
     try {

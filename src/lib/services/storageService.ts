@@ -21,6 +21,7 @@ const BUCKET = "creatives";
 const SIGNED_URL_TTL_SECONDS = 365 * 24 * 60 * 60;
 
 /** Accepted MIME types */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ACCEPTED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",

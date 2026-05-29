@@ -143,6 +143,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : { tenantId },
     orderBy: { createdAt: "desc" },
   });
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
   const blueprintIds = blueprints.map((b) => b.id);
   const blueprintNameMap = new Map<string, string>(
     blueprints.map((b) => [b.id, b.businessName])

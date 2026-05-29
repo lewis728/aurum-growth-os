@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantId } from "@/lib/auth";
 
-export async function GET(_req: NextRequest): Promise<NextResponse> {
+export async function GET(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   try {
     const tenantId = await getTenantId();
     return NextResponse.json({ tenantId });

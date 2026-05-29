@@ -212,7 +212,7 @@ export function CreativeUploader({
       {/* Heading */}
       <div>
         <h3 className="text-base font-semibold text-gray-900">
-          Upload your client's creative assets
+          Upload your client&apos;s creative assets
         </h3>
         <p className="text-xs text-gray-500 mt-0.5">
           JPEG, PNG, WebP (max 30 MB) · MP4, MOV (max 100 MB) ·{" "}
@@ -226,7 +226,7 @@ export function CreativeUploader({
         <div
           role="button"
           tabIndex={0}
-          aria-label="Upload your client's creative assets — click or drag files here"
+          aria-label="Upload your client&apos;s creative assets — click or drag files here"
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);

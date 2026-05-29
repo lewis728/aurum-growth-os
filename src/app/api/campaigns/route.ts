@@ -15,7 +15,7 @@ import { canLaunchCampaign } from "@/lib/access/subscriptionGuard";
 // Placeholder for future direct blueprint creation endpoint.
 // Currently blueprints are created via /api/onboarding/chat.
 // Guard is here so any future POST is protected from the start.
-export async function POST(_req: NextRequest): Promise<NextResponse> {
+export async function POST(_req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
   let tenantId: string;
   try {
     tenantId = await getTenantId();

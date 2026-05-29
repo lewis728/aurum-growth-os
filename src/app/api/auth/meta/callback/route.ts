@@ -349,7 +349,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── 5. Fetch ad account, page, and pixel IDs ──────────────────────────────
   let adAccountId: string;
   let pageId: string;
-  let pixelId: string;
+  let pixelId = ""; // eslint-disable-line prefer-const
 
   try {
     adAccountId = await fetchAdAccountId(longLivedToken);

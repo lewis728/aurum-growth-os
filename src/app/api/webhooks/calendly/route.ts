@@ -153,7 +153,8 @@ interface CalendlyWebhookPayload {
  * We match on the user UUID extracted from the CalendarConnection.calendarId.
  */
 async function resolveTenantIdFromCalendlyEvent(
-  eventUri: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _eventUri: string
 ): Promise<string | null> {
   // Find all Calendly connections and match by user URI prefix
   const connections = await prisma.calendarConnection.findMany({

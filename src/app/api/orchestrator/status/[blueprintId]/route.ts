@@ -59,7 +59,7 @@ export async function GET(
         try { controller.enqueue(encoder.encode(": ping\n\n")); } catch { /* closed */ }
       }, HEARTBEAT_MS);
 
-      let pollInterval: ReturnType<typeof setInterval>;
+      let pollInterval: ReturnType<typeof setInterval> | undefined; // eslint-disable-line prefer-const
 
       req.signal.addEventListener("abort", () => {
         clearInterval(heartbeatInterval);

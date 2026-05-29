@@ -21,6 +21,7 @@ import { uploadCreativeAsset } from "@/lib/services/storageService";
 
 // ── Accepted MIME types (mirrored from storageService for early rejection) ────
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ACCEPTED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
