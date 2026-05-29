@@ -165,6 +165,7 @@ model VerticalProfile {
   id                        String   @id @default(cuid())
   vertical                  String   @unique  // ServiceVertical enum value or GENERAL_[TYPE]
   displayName               String
+  systemPromptBase          String   @default("")  // Base system prompt injected into AI chat for this vertical
   avgTransactionValueGbp    Float
   purchaseTimelineDays      Int
   conversionGoalType        String   // 'formbooking' | 'phonecall' | 'walkin'
