@@ -6,7 +6,6 @@
 // Custom domain resolution: resolves agency custom domains to tenantId via x-agency-tenant-id header.
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
-import { getBrandingByDomain } from "@/lib/services/brandingService";
 
 // ── Route matchers ────────────────────────────────────────────────────────────
 const isPublicRoute = createRouteMatcher([
@@ -16,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/(.*)",
   "/api/cron/(.*)",
   "/api/debug(.*)",
+  "/api/branding/resolve",
 ]);
 
 const isChatRoute = createRouteMatcher(["/api/chat"]);
@@ -98,9 +98,16 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (requestHostname && appHostname && requestHostname !== appHostname) {
     try {
-      const branding = await getBrandingByDomain(requestHostname);
-      if (branding) {
-        resolvedHeaders["x-agency-tenant-id"] = branding.tenantId;
+      // Resolve custom domain to tenantId via an internal API call.
+      // We cannot import Prisma directly here — middleware runs in the Edge runtime.
+      const url = new URL("/api/branding/resolve", req.url);
+      url.searchParams.set("domain", requestHostname);
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const data = (await res.json()) as { tenantId?: string };
+        if (data.tenantId) {
+          resolvedHeaders["x-agency-tenant-id"] = data.tenantId;
+        }
       }
     } catch {
       // Non-fatal — continue without setting the header
@@ -108,11 +115,13 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // ── Step 2: Clerk auth protection ────────────────────────────────────────
+  // In Clerk v5 clerkMiddleware, auth is a function: auth() returns ClerkMiddlewareAuthObject.
+  // protect() on that object is synchronous (throws a redirect response if unauthenticated).
   if (!isPublicRoute(req)) {
     auth().protect();
   }
 
-  // ── Step 3: Rate limit /api/chat ──────────────────────────────────────────
+  // ── Step 3: Rate limit /api/chat ────────────────────────────────────────
   if (isChatRoute(req) && req.method === "POST") {
     const { orgId } = auth();
     const key = extractRateLimitKey(req, orgId);
