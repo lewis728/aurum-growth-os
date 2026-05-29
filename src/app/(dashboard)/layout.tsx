@@ -2,11 +2,15 @@
  * src/app/(dashboard)/layout.tsx
  * Dashboard route group layout.
  *
- * Guard: has org but no AgencyProfile → re-key pending profile or redirect to /onboarding
+ * Guard: no AgencyProfile found for this user → redirect to /onboarding
+ *
+ * Lookup order:
+ *   1. By orgId (JWT has org)
+ *   2. By pending:userId (org not yet in JWT — re-key to orgId if possible)
+ *   3. Not found → redirect to /onboarding
  *
  * NOTE: Guard 1 (userId && !orgId → /setup-org) has been intentionally removed.
- * New users are routed to /setup-org by Clerk's afterSignUpUrl, not by this layout.
- * Guard 1 caused redirect loops when the JWT cookie hadn't propagated yet after setActive().
+ * New users are routed to /setup-org by Clerk's afterSignUpUrl.
  */
 
 import { redirect } from "next/navigation";
@@ -30,29 +34,40 @@ export default async function DashboardLayout({
     // Clerk context unavailable — page-level guards handle auth
   }
 
-  // Guard: has org → must have AgencyProfile (re-key pending if needed)
-  if (orgId) {
-    let agencyProfile = await prisma.agencyProfile.findUnique({
-      where: { tenantId: orgId },
-      select: { id: true },
-    });
+  // Guard: must have a valid AgencyProfile to access the dashboard
+  if (userId) {
+    let agencyProfile: { id: string } | null = null;
 
-    if (!agencyProfile && userId) {
+    // 1. Try lookup by orgId (happy path — JWT has org)
+    if (orgId) {
+      agencyProfile = await prisma.agencyProfile.findUnique({
+        where: { tenantId: orgId },
+        select: { id: true },
+      });
+    }
+
+    // 2. Try lookup by pending:userId (JWT missing org — common after onboarding)
+    if (!agencyProfile) {
       const pendingProfile = await prisma.agencyProfile.findUnique({
         where: { tenantId: `pending:${userId}` },
         select: { id: true },
       });
 
       if (pendingProfile) {
-        await prisma.agencyProfile.update({
-          where: { tenantId: `pending:${userId}` },
-          data: { tenantId: orgId },
-        });
+        if (orgId) {
+          // Re-key now that we have orgId
+          await prisma.agencyProfile.update({
+            where: { tenantId: `pending:${userId}` },
+            data: { tenantId: orgId },
+          });
+          console.log(`[dashboard/layout] Re-keyed AgencyProfile pending:${userId} → ${orgId}`);
+        }
+        // Accept the pending profile — user has completed onboarding
         agencyProfile = pendingProfile;
-        console.log(`[dashboard/layout] Re-keyed AgencyProfile pending:${userId} → ${orgId}`);
       }
     }
 
+    // 3. No profile found → send to onboarding
     if (!agencyProfile) {
       redirect("/onboarding");
     }
