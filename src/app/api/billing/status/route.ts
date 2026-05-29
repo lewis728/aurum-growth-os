@@ -40,6 +40,6 @@ export async function GET(): Promise<NextResponse> {
     if (msg.includes("UNAUTHORIZED") || msg.includes("Unauthorized")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: msg, step: "catch" }, { status: 500 });
   }
 }
