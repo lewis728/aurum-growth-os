@@ -20,21 +20,23 @@ export default function SetupOrgPage() {
   useEffect(() => {
     if (!orgListLoaded) return;
 
-    // If orgId is already set, skip setup
-    if (orgId) {
-      setSetupDone(true);
-      return;
-    }
-
     async function setup() {
       try {
         if (fromOnboarding) {
-          // Post-onboarding: re-activate the existing org (already created)
+          // ALWAYS call setActive() here — even if orgId is already set client-side.
+          // Without this, the JWT cookie is stale and /api/auth/link-org sees no orgId
+          // server-side, returns 400, and the AgencyProfile never gets re-keyed.
           setStatus("Syncing your session…");
           const memberships = userMemberships?.data ?? [];
           if (memberships.length > 0 && setActive) {
             await setActive({ organization: memberships[0]!.organization.id });
           }
+          setSetupDone(true);
+          return;
+        }
+
+        // Not from onboarding — if org already exists, skip setup
+        if (orgId) {
           setSetupDone(true);
           return;
         }
