@@ -7,6 +7,12 @@
  *
  * Server component: checks DB for existing blueprints and redirects if found.
  * This prevents returning agency owners from ever seeing the onboarding flow again.
+ *
+ * NOTE: We intentionally do NOT redirect to /setup-org when orgId is null.
+ * The user arrives here from /setup-org after setActive() — the Clerk JWT cookie
+ * may still be propagating. Redirecting back to /setup-org here causes an
+ * infinite loop. The OnboardingChat component handles the unauthenticated state
+ * gracefully on the client side.
  */
 
 import { redirect } from "next/navigation";
@@ -26,26 +32,24 @@ export default async function OnboardingPage() {
   const { userId, orgId } = await auth();
 
   if (!userId) {
-    // Not authenticated at all
+    // Not authenticated at all — Clerk middleware should handle this
     redirect("/sign-in");
   }
 
-  if (!orgId) {
-    // Signed in but no organisation yet — create one first
-    redirect("/setup-org");
+  // If orgId is null here, the JWT cookie is still propagating after setActive().
+  // Do NOT redirect to /setup-org — that causes an infinite loop.
+  // Just render the page; OnboardingChat will handle the state client-side.
+
+  // ── Check for existing blueprints (only if we have an org) ─────────────────
+  if (orgId) {
+    const existingBlueprintCount = await prisma.campaignBlueprint.count({
+      where: { tenantId: orgId },
+    });
+    if (existingBlueprintCount > 0) {
+      redirect("/");
+    }
   }
 
-  // ── Check for existing blueprints ───────────────────────────────────────────
-  // If the agency owner already has at least one blueprint, they've completed
-  // onboarding. Redirect them to the dashboard immediately.
-  const existingBlueprintCount = await prisma.campaignBlueprint.count({
-    where: { tenantId: orgId },
-  });
-
-  if (existingBlueprintCount > 0) {
-    redirect("/");
-  }
-
-  // ── First-time user — show onboarding ──────────────────────────────────────
+  // ── Render onboarding ──────────────────────────────────────────────────────
   return <OnboardingChat />;
 }
