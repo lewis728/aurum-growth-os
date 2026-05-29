@@ -46,16 +46,34 @@ async function fetcher(url: string): Promise<BillingStatusResponse> {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+// Permissive defaults — returned when billing check errors or is loading.
+// Prevents the subscription overlay from blocking the dashboard when
+// Stripe is not yet connected or the JWT is still propagating.
+const PERMISSIVE_DEFAULTS: SubscriptionAccess = {
+  state: "active",
+  canLaunch: true,
+  isPastDue: false,
+  isTrialing: false,
+  trialEndsAt: null,
+  seatCount: 0,
+  isLoading: false,
+};
+
 export function useSubscriptionAccess(): SubscriptionAccess {
-  const { data, isLoading } = useSWR<BillingStatusResponse>(
+  const { data, isLoading, error } = useSWR<BillingStatusResponse>(
     "/api/billing/status",
     fetcher,
     {
       refreshInterval: 60_000,
       revalidateOnFocus: false,
-      shouldRetryOnError: true,
+      shouldRetryOnError: false, // don't hammer a 401
     }
   );
+
+  // If loading or errored (e.g. Stripe not connected, 401), return permissive defaults
+  // so the dashboard is fully accessible. The overlay will only show once Stripe
+  // is connected and billing/status returns a real "none" state.
+  if (isLoading || error || !data) return { ...PERMISSIVE_DEFAULTS, isLoading };
 
   // Derive subscription state from status string
   function deriveState(status: string | null | undefined): SubscriptionState {
@@ -73,8 +91,8 @@ export function useSubscriptionAccess(): SubscriptionAccess {
     }
   }
 
-  const state = deriveState(data?.status);
-  const seatCount = data?.seatCount ?? 0;
+  const state = deriveState(data.status);
+  const seatCount = data.seatCount ?? 0;
   const isTrialing = state === "trialing";
   const isPastDue = state === "past_due";
 
@@ -83,7 +101,7 @@ export function useSubscriptionAccess(): SubscriptionAccess {
     state === "active" ||
     (state === "trialing" && seatCount < TRIAL_SEAT_CAP);
 
-  const trialEndsAt = data?.trialEndsAt ? new Date(data.trialEndsAt) : null;
+  const trialEndsAt = data.trialEndsAt ? new Date(data.trialEndsAt) : null;
 
   return {
     state,
