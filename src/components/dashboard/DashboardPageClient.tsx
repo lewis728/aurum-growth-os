@@ -332,7 +332,7 @@ function DashboardView() {
   const [showAddClient, setShowAddClient] = useState(false);
   const { data, isLoading } = useDashboardMetrics();
 
-  const bookings = (data as any)?.upcomingBookings ?? [];
+  const bookings = data?.upcomingBookings ?? [];
 
   return (
     <div className="flex h-screen overflow-hidden bg-black">
