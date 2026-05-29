@@ -69,9 +69,20 @@ function sseEvent(data: Record<string, unknown>): string {
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth ──────────────────────────────────────────────────────────────────
-  const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  // Prefer orgId from JWT; fall back to AgencyProfile lookup for users whose
+  // JWT cookie hasn't propagated the org yet (e.g. first dashboard load).
+  let tenantId = orgId ?? null;
+  if (!tenantId) {
+    const profile = await prisma.agencyProfile.findFirst({
+      where: { OR: [{ tenantId: `pending:${userId}` }] },
+      select: { tenantId: true },
+    });
+    if (profile) tenantId = profile.tenantId;
+  }
+  if (!tenantId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   // ── 2. Fetch organisation name ──────────────────────────────────────────────
   let tenantName = "your agency";
