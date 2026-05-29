@@ -65,28 +65,18 @@ export default function SetupOrgPage() {
   }, [orgListLoaded]);
 
   // ── Effect 2: Navigate once orgId is confirmed in useAuth ─────────────────
+  // No link-org API call needed — the dashboard layout re-keys the pending AgencyProfile
+  // server-side on first load (where auth() always returns the correct orgId).
   useEffect(() => {
     if (!setupDone || !orgId) return;
 
-    async function finalize() {
-      if (fromOnboarding) {
-        // Link any pending AgencyProfile to the real orgId
-        setStatus("Finalising your profile…");
-        try {
-          await fetch("/api/auth/link-org", { method: "POST" });
-        } catch {
-          // Non-fatal — profile will be linked on next request
-        }
-        const dest = agencyName
-          ? `/?welcome=1&agencyName=${encodeURIComponent(agencyName)}`
-          : "/?welcome=1";
-        window.location.href = dest;
-      } else {
-        window.location.href = "/onboarding";
-      }
-    }
+    const dest = fromOnboarding
+      ? agencyName
+        ? `/?welcome=1&agencyName=${encodeURIComponent(agencyName)}`
+        : "/?welcome=1"
+      : "/onboarding";
 
-    void finalize();
+    window.location.href = dest;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setupDone, orgId]);
 

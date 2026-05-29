@@ -6,7 +6,7 @@
  * Guards (evaluated before rendering):
  *   1. Signed in but no org  → redirect to /setup-org
  *      (skipped when already on /setup-org or /onboarding to prevent loops)
- *   2. Has org but no blueprints → redirect to /onboarding
+ *   2. Has org but no AgencyProfile → re-key pending profile or redirect to /onboarding
  *
  * IMPORTANT: redirect() calls must be OUTSIDE the try/catch that wraps auth().
  * In Next.js 14, redirect() throws an internal signal that is NOT an Error
@@ -50,14 +50,34 @@ export default async function DashboardLayout({
     redirect("/setup-org");
   }
 
-  // ── Guard 2: has org but no AgencyProfile → onboarding ─────────────────────
-  // AgencyProfile is saved at the end of onboarding (not CampaignBlueprint).
-  // Blueprints are created later in the Add Client flow.
+  // ── Guard 2: has org but no AgencyProfile → re-key pending or redirect to onboarding ─────
+  // AgencyProfile is saved at the end of onboarding. If the JWT cookie hadn’t propagated
+  // during onboarding, the profile was saved as ‘pending:userId’. Re-key it here on the
+  // first dashboard load where auth() always returns the correct orgId (server-side).
   if (orgId) {
-    const agencyProfile = await prisma.agencyProfile.findUnique({
+    let agencyProfile = await prisma.agencyProfile.findUnique({
       where: { tenantId: orgId },
       select: { id: true },
     });
+
+    if (!agencyProfile && userId) {
+      // Check for a pending profile saved before the JWT cookie propagated
+      const pendingProfile = await prisma.agencyProfile.findUnique({
+        where: { tenantId: `pending:${userId}` },
+        select: { id: true },
+      });
+
+      if (pendingProfile) {
+        // Re-key to the real orgId now that we have it server-side
+        await prisma.agencyProfile.update({
+          where: { tenantId: `pending:${userId}` },
+          data: { tenantId: orgId },
+        });
+        agencyProfile = pendingProfile;
+        console.log(`[dashboard/layout] Re-keyed AgencyProfile pending:${userId} → ${orgId}`);
+      }
+    }
+
     if (!agencyProfile) {
       redirect("/onboarding");
     }
