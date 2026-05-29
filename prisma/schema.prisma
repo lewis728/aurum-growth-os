@@ -4,7 +4,8 @@
 // Seven models: CampaignBlueprint, Lead, Appointment, ScheduledReminder, CommandLog, MetaConnection, CalendarConnection
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
