@@ -3,44 +3,40 @@
  * src/app/setup-org/page.tsx
  *
  * Shown once on first sign-in when the user has no Clerk organisation.
- * Automatically:
- *   1. Calls POST /api/auth/setup-org to create a Clerk org for the user
- *   2. Calls Clerk's setActive() to activate the new org in the session JWT
- *   3. Redirects to /onboarding
  *
- * The user sees a brief loading screen — no manual action required.
+ * Flow:
+ *   1. Call POST /api/auth/setup-org to create the Clerk org server-side
+ *   2. Call setActive({ organization: orgId }) to activate it in the session
+ *   3. Wait for useAuth().orgId to be populated (Clerk propagates reactively)
+ *   4. Only then navigate to /onboarding via window.location.href
+ *
+ * This prevents the redirect loop where we navigate before the JWT cookie
+ * has synced, causing the server to see orgId as null and redirect back here.
  */
+import { useAuth, useOrganizationList } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
-import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 
 export default function SetupOrgPage() {
-  const { user, isLoaded: userLoaded } = useUser();
-  const { organization } = useOrganization();
+  const { orgId } = useAuth();
   const { setActive, isLoaded: orgListLoaded } = useOrganizationList();
-  const [status, setStatus] = useState<"loading" | "creating" | "activating" | "done" | "error">("loading");
+  const [setupDone, setSetupDone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [status, setStatus] = useState<"loading" | "creating" | "activating" | "waiting" | "error">("loading");
 
+  // Step 1: Call setup API and setActive — runs once on mount
   useEffect(() => {
-    if (!userLoaded || !orgListLoaded) return;
+    if (!orgListLoaded) return;
 
-    // If user already has an active org, force a full reload to /onboarding
-    // so the server receives a fresh JWT with orgId already set.
-    if (organization) {
+    // If already has an org (e.g. page refresh mid-flow), skip straight to navigate
+    if (orgId) {
       window.location.href = "/onboarding";
       return;
     }
 
-    // If not signed in, go to sign-in
-    if (!user) {
-      window.location.href = "/sign-in";
-      return;
-    }
-
-    async function createAndActivateOrg() {
+    async function setup() {
       try {
         setStatus("creating");
 
-        // Call the server-side route to create the Clerk org
         const res = await fetch("/api/auth/setup-org", {
           method: "POST",
           credentials: "include",
@@ -48,24 +44,20 @@ export default function SetupOrgPage() {
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error ?? `HTTP ${res.status}`);
+          throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
         }
 
-        const { orgId } = await res.json();
+        const data = (await res.json()) as { orgId: string };
 
         setStatus("activating");
 
-        // Activate the new org in the Clerk session so orgId appears in JWT
         if (setActive) {
-          await setActive({ organization: orgId });
+          await setActive({ organization: data.orgId });
         }
 
-        setStatus("done");
-
-        // Hard browser redirect — forces Clerk to issue a fresh HTTP-only JWT
-        // cookie containing the new orgId before any server request is made.
-        // A client-side router.push() does NOT re-issue the cookie.
-        window.location.href = "/onboarding";
+        // Mark setup complete — Step 2 effect will watch for orgId to populate
+        setStatus("waiting");
+        setSetupDone(true);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[setup-org]", msg);
@@ -74,9 +66,16 @@ export default function SetupOrgPage() {
       }
     }
 
-    createAndActivateOrg();
+    setup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLoaded, orgListLoaded, organization, user]);
+  }, [orgListLoaded]);
+
+  // Step 2: Navigate only once Clerk has propagated orgId to the client session
+  useEffect(() => {
+    if (setupDone && orgId) {
+      window.location.href = "/onboarding";
+    }
+  }, [setupDone, orgId]);
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
@@ -116,7 +115,7 @@ export default function SetupOrgPage() {
               {status === "loading" && "Preparing your workspace…"}
               {status === "creating" && "Creating your agency workspace…"}
               {status === "activating" && "Activating your workspace…"}
-              {status === "done" && "Done! Redirecting…"}
+              {status === "waiting" && "Syncing session…"}
             </p>
             <p className="text-xs text-gray-400">This only happens once.</p>
           </>
