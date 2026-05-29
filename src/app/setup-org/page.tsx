@@ -4,10 +4,6 @@ import { useAuth, useOrganizationList } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// ── Poll until the server-side JWT has orgId ──────────────────────────────────
-// After setActive(), the JWT cookie is refreshed asynchronously.
-// We poll /api/auth/check-session until the server confirms orgId,
-// then navigate — this avoids the layout's Guard 1 firing on a stale JWT.
 async function waitForServerOrgId(maxMs = 8000): Promise<boolean> {
   const interval = 400;
   const attempts = Math.ceil(maxMs / interval);
@@ -17,11 +13,11 @@ async function waitForServerOrgId(maxMs = 8000): Promise<boolean> {
       const data = (await res.json()) as { orgId: string | null };
       if (data.orgId) return true;
     } catch {
-      // ignore transient fetch errors
+      // ignore transient errors
     }
     await new Promise((r) => setTimeout(r, interval));
   }
-  return false; // timed out — navigate anyway
+  return false;
 }
 
 export default function SetupOrgPage() {
@@ -36,36 +32,28 @@ export default function SetupOrgPage() {
   const [status, setStatus] = useState("Preparing your workspace…");
   const [error, setError] = useState<string | null>(null);
 
-  // ── Effect 1: Create or re-activate org ──────────────────────────────────
   useEffect(() => {
     if (!orgListLoaded) return;
 
     async function setup() {
       try {
         if (fromOnboarding) {
-          // Call setActive() to refresh the JWT cookie with the active org
           setStatus("Syncing your session…");
           const memberships = userMemberships?.data ?? [];
           if (memberships.length > 0 && setActive) {
             await setActive({ organization: memberships[0]!.organization.id });
           }
-
-          // Wait until the server-side JWT actually has the orgId
-          // (JWT cookie is refreshed asynchronously after setActive resolves)
           setStatus("Finalising your workspace…");
           await waitForServerOrgId();
-
           setSetupDone(true);
           return;
         }
 
-        // Not from onboarding — if org already exists, skip setup
         if (orgId) {
           setSetupDone(true);
           return;
         }
 
-        // First sign-in: create the org
         setStatus("Creating your agency workspace…");
         const res = await fetch("/api/auth/setup-org", { method: "POST" });
         if (!res.ok) {
@@ -76,6 +64,7 @@ export default function SetupOrgPage() {
         if (setActive) {
           await setActive({ organization: data.orgId });
         }
+        await waitForServerOrgId();
         setSetupDone(true);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -88,26 +77,13 @@ export default function SetupOrgPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgListLoaded]);
 
-  // ── Effect 2: Navigate once setup is done ─────────────────────────────────
-  // For the fromOnboarding path: we've already polled until JWT has orgId,
-  // so navigate immediately when setupDone is true — no need to wait for
-  // useAuth().orgId (which lags behind the JWT cookie).
-  //
-  // For the !fromOnboarding path: send to / and let the layout decide.
-  // The layout will redirect to /onboarding if AgencyProfile doesn't exist.
+  // Always navigate to / when done — layout handles redirecting to /onboarding if needed
   useEffect(() => {
     if (!setupDone) return;
-
-    if (fromOnboarding) {
-      const dest = agencyName
-        ? `/?welcome=1&agencyName=${encodeURIComponent(agencyName)}`
-        : "/?welcome=1";
-      window.location.href = dest;
-      return;
-    }
-
-    // Not from onboarding — go to dashboard and let the layout handle it
-    window.location.href = "/";
+    const dest = fromOnboarding && agencyName
+      ? `/?welcome=1&agencyName=${encodeURIComponent(agencyName)}`
+      : "/";
+    window.location.href = dest;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setupDone]);
 
