@@ -15,16 +15,19 @@ export async function GET(): Promise<NextResponse> {
     take: 20,
   });
 
-  const clients = blueprints.map((b) => ({
-    id: b.id,
-    businessName: (b as Record<string, unknown>).businessName as string ?? (b as Record<string, unknown>).businessDescription as string ?? "Client",
-    vertical: (b as Record<string, unknown>).vertical as string ?? (b as Record<string, unknown>).serviceIntent as string ?? "General",
-    status: ((b as Record<string, unknown>).status as string ?? "setup") as "live" | "paused" | "pending" | "setup",
-    spendToday: 0,
-    leadsThisWeek: 0,
-    cpl: null,
-    lastLeadAt: null,
-  }));
+  const clients = blueprints.map((b) => {
+    const row = b as Record<string, unknown>;
+    return {
+      id: b.id,
+      businessName: String(row.businessName ?? row.businessDescription ?? "Client"),
+      vertical: String(row.vertical ?? row.serviceIntent ?? "General"),
+      status: (String(row.status ?? "setup")) as "live" | "paused" | "pending" | "setup",
+      spendToday: 0,
+      leadsThisWeek: 0,
+      cpl: null as number | null,
+      lastLeadAt: null as string | null,
+    };
+  });
 
   return NextResponse.json({ clients });
 }

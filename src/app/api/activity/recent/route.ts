@@ -15,11 +15,11 @@ export async function GET(): Promise<NextResponse> {
     take: 10,
   }).catch(() => []);
 
-  const items = leads.map((l: Record<string, unknown>) => ({
-    type: "lead",
+  const items = leads.map((l) => ({
+    type: "lead" as const,
     title: "New lead",
-    description: `${(l.fullName as string) ?? "Unknown"} submitted a form`,
-    createdAt: l.createdAt,
+    description: `${String((l as Record<string, unknown>).fullName ?? "Unknown")} submitted a form`,
+    createdAt: String(l.createdAt),
   }));
 
   return NextResponse.json({ items });
