@@ -20,16 +20,21 @@ export default async function DashboardLayout({
 }) {
   // ── Onboarding redirect guard ─────────────────────────────────────────────
   // Only runs for authenticated users (Clerk middleware protects the route).
-  const { orgId } = await auth();
-
-  if (orgId) {
-    const blueprintCount = await prisma.campaignBlueprint.count({
-      where: { tenantId: orgId },
-    });
-
-    if (blueprintCount === 0) {
-      redirect("/onboarding");
+  // Wrapped in try/catch: if Clerk context is unavailable (e.g. unauthenticated
+  // requests that bypass the middleware matcher), fall through gracefully.
+  try {
+    const { orgId } = await auth();
+    if (orgId) {
+      const blueprintCount = await prisma.campaignBlueprint.count({
+        where: { tenantId: orgId },
+      });
+      if (blueprintCount === 0) {
+        redirect("/onboarding");
+      }
     }
+  } catch {
+    // auth() threw — Clerk context unavailable. Fall through; page-level
+    // SignedIn/SignedOut guards will handle the authentication state.
   }
 
   return (
