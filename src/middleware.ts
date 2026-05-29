@@ -22,6 +22,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/cron/(.*)",
   "/api/debug(.*)",
   "/api/branding/(.*)",
+  "/api/test(.*)",
 ]);
 
 const isChatRoute = createRouteMatcher(["/api/chat"]);
