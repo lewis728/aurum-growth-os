@@ -80,7 +80,7 @@ export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
     try {
       auth().protect();
-    } catch (err) {
+    } catch {
       // If protect() throws (e.g. Clerk misconfiguration), return 401 for API
       // routes and redirect to sign-in for page routes.
       const isApiRoute = req.nextUrl.pathname.startsWith("/api/");
