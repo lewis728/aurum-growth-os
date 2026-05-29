@@ -3,7 +3,13 @@
 // Protects /api/(.*) and /(dashboard)/(.*) routes.
 // Webhook routes are explicitly public — they are called by Retell, Meta, and Twilio.
 // Rate limiting: 20 requests/minute per tenantId on /api/chat.
-// Custom domain resolution: resolves agency custom domains to tenantId via x-agency-tenant-id header.
+//
+// NOTE: Custom domain resolution (getBrandingByDomain) has been moved out of
+// middleware because:
+//   1. Middleware runs in the Edge runtime — Prisma (Node.js only) cannot be imported.
+//   2. Calling a Next.js API route from middleware causes recursive middleware execution.
+// Custom domain resolution is handled at the page/layout level instead.
+
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -15,7 +21,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/(.*)",
   "/api/cron/(.*)",
   "/api/debug(.*)",
-  "/api/branding/resolve",
+  "/api/branding/(.*)",
 ]);
 
 const isChatRoute = createRouteMatcher(["/api/chat"]);
@@ -65,63 +71,29 @@ function extractRateLimitKey(req: NextRequest, orgId: string | null | undefined)
   return ip ?? "unknown";
 }
 
-/**
- * Extracts the hostname from a request, stripping port numbers.
- */
-function extractHostname(req: NextRequest): string {
-  const host = req.headers.get("host") ?? "";
-  return host.split(":")[0] ?? "";
-}
-
-/**
- * Extracts the hostname from a URL string.
- */
-function extractAppHostname(): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  try {
-    return new URL(appUrl).hostname;
-  } catch {
-    return "";
-  }
-}
-
 // ── Middleware ────────────────────────────────────────────────────────────────
 export default clerkMiddleware(async (auth, req) => {
-  // ── Step 1: Custom domain resolution ─────────────────────────────────────
-  // If the request hostname does not match the main app hostname,
-  // attempt to resolve it to an agency tenantId via AgencyBranding.customDomain.
-  // This allows app.theiragency.com to resolve to the correct agency context.
-  const requestHostname = extractHostname(req);
-  const appHostname = extractAppHostname();
-
-  const resolvedHeaders: Record<string, string> = {};
-
-  if (requestHostname && appHostname && requestHostname !== appHostname) {
+  // ── Clerk auth protection ─────────────────────────────────────────────────
+  // auth() returns ClerkMiddlewareAuthObject; protect() redirects unauthenticated
+  // users to the Clerk sign-in page. Wrapped in try/catch so any unexpected
+  // Clerk error returns a clean 401 JSON instead of an empty 500.
+  if (!isPublicRoute(req)) {
     try {
-      // Resolve custom domain to tenantId via an internal API call.
-      // We cannot import Prisma directly here — middleware runs in the Edge runtime.
-      const url = new URL("/api/branding/resolve", req.url);
-      url.searchParams.set("domain", requestHostname);
-      const res = await fetch(url.toString());
-      if (res.ok) {
-        const data = (await res.json()) as { tenantId?: string };
-        if (data.tenantId) {
-          resolvedHeaders["x-agency-tenant-id"] = data.tenantId;
-        }
+      auth().protect();
+    } catch (err) {
+      // If protect() throws (e.g. Clerk misconfiguration), return 401 for API
+      // routes and redirect to sign-in for page routes.
+      const isApiRoute = req.nextUrl.pathname.startsWith("/api/");
+      if (isApiRoute) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-    } catch {
-      // Non-fatal — continue without setting the header
+      const signInUrl = new URL("/sign-in", req.url);
+      signInUrl.searchParams.set("redirect_url", req.url);
+      return NextResponse.redirect(signInUrl);
     }
   }
 
-  // ── Step 2: Clerk auth protection ────────────────────────────────────────
-  // In Clerk v5 clerkMiddleware, auth is a function: auth() returns ClerkMiddlewareAuthObject.
-  // protect() on that object is synchronous (throws a redirect response if unauthenticated).
-  if (!isPublicRoute(req)) {
-    auth().protect();
-  }
-
-  // ── Step 3: Rate limit /api/chat ────────────────────────────────────────
+  // ── Rate limit /api/chat ──────────────────────────────────────────────────
   if (isChatRoute(req) && req.method === "POST") {
     const { orgId } = auth();
     const key = extractRateLimitKey(req, orgId);
@@ -135,15 +107,6 @@ export default clerkMiddleware(async (auth, req) => {
         }
       );
     }
-  }
-
-  // ── Step 4: Forward resolved headers if any ───────────────────────────────
-  if (Object.keys(resolvedHeaders).length > 0) {
-    const requestHeaders = new Headers(req.headers);
-    for (const [key, value] of Object.entries(resolvedHeaders)) {
-      requestHeaders.set(key, value);
-    }
-    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 });
 
