@@ -2,39 +2,72 @@
 /**
  * src/app/setup-org/page.tsx
  *
- * Shown once on first sign-in when the user has no Clerk organisation.
+ * Shown in two scenarios:
+ *   A) First sign-in: user has no Clerk organisation yet
+ *      → creates org, activates it, redirects to /onboarding
  *
- * Flow:
- *   1. Call POST /api/auth/setup-org to create the Clerk org server-side
- *   2. Call setActive({ organization: orgId }) to activate it in the session
- *   3. Wait for useAuth().orgId to be populated (Clerk propagates reactively)
- *   4. Only then navigate to /onboarding via window.location.href
+ *   B) Post-onboarding: user arrives via /setup-org?from=onboarding
+ *      → org already exists, just needs a fresh JWT before hitting the dashboard
+ *      → skips org creation, calls setActive() with existing orgId, redirects to /
  *
- * This prevents the redirect loop where we navigate before the JWT cookie
- * has synced, causing the server to see orgId as null and redirect back here.
+ * Both paths wait for useAuth().orgId to be populated before navigating,
+ * ensuring the JWT cookie contains orgId before any server-side check runs.
  */
 import { useAuth, useOrganizationList } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 export default function SetupOrgPage() {
   const { orgId } = useAuth();
-  const { setActive, isLoaded: orgListLoaded } = useOrganizationList();
+  const { setActive, isLoaded: orgListLoaded, userMemberships } = useOrganizationList({
+    userMemberships: { infinite: true },
+  });
   const [setupDone, setSetupDone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [status, setStatus] = useState<"loading" | "creating" | "activating" | "waiting" | "error">("loading");
 
-  // Step 1: Call setup API and setActive — runs once on mount
+  // Read query params client-side
+  const [fromOnboarding, setFromOnboarding] = useState(false);
+  const [blueprintId, setBlueprintId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFromOnboarding(params.get("from") === "onboarding");
+    setBlueprintId(params.get("blueprintId") ?? null);
+  }, []);
+
+  // Determine final redirect destination
+  const redirectTo = fromOnboarding ? "/" : "/onboarding";
+  const redirectWithParams =
+    fromOnboarding && blueprintId
+      ? `/?onboarded=true&blueprintId=${blueprintId}`
+      : redirectTo;
+
+  // Step 1: Call setup API (or re-activate existing org) — runs once on mount
   useEffect(() => {
     if (!orgListLoaded) return;
 
-    // If already has an org (e.g. page refresh mid-flow), skip straight to navigate
+    // If already has an org in the JWT, navigate directly
     if (orgId) {
-      window.location.href = "/onboarding";
+      window.location.href = redirectWithParams;
       return;
     }
 
     async function setup() {
       try {
+        // Scenario B: arrived from onboarding — org already exists, just activate it
+        if (fromOnboarding) {
+          setStatus("activating");
+          // Find the first membership and activate it
+          const firstMembership = userMemberships?.data?.[0];
+          if (firstMembership && setActive) {
+            await setActive({ organization: firstMembership.organization.id });
+          }
+          setStatus("waiting");
+          setSetupDone(true);
+          return;
+        }
+
+        // Scenario A: first sign-in — create a new org
         setStatus("creating");
 
         const res = await fetch("/api/auth/setup-org", {
@@ -68,14 +101,14 @@ export default function SetupOrgPage() {
 
     setup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgListLoaded]);
+  }, [orgListLoaded, fromOnboarding]);
 
   // Step 2: Navigate only once Clerk has propagated orgId to the client session
   useEffect(() => {
     if (setupDone && orgId) {
-      window.location.href = "/onboarding";
+      window.location.href = redirectWithParams;
     }
-  }, [setupDone, orgId]);
+  }, [setupDone, orgId, redirectWithParams]);
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4">
@@ -117,7 +150,9 @@ export default function SetupOrgPage() {
               {status === "activating" && "Activating your workspace…"}
               {status === "waiting" && "Syncing session…"}
             </p>
-            <p className="text-xs text-gray-400">This only happens once.</p>
+            <p className="text-xs text-gray-400">
+              {fromOnboarding ? "Almost there…" : "This only happens once."}
+            </p>
           </>
         )}
       </div>

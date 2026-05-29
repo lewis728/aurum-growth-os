@@ -307,9 +307,10 @@ export default function OnboardingChat() {
                 prev.filter((m) => !(m.id === assistantMsgId && m.content === ""))
               );
 
-              // Redirect to dashboard after a short delay
+              // Route via /setup-org to ensure a fresh JWT with orgId before
+              // the dashboard layout runs its server-side orgId check.
               setTimeout(() => {
-                router.push(`/?onboarded=true&blueprintId=${blueprintId}`);
+                window.location.href = `/setup-org?from=onboarding&blueprintId=${blueprintId}`;
               }, 2500);
               return;
             }
