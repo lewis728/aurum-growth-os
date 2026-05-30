@@ -66,7 +66,9 @@ export async function sendMonthlyReport(
 ): Promise<void> {
   try {
     const branding = await getBranding(tenantId);
-    const fromName = branding?.fromName ?? "Aurum Growth OS";
+    // Prefer the explicit sender name, then the white-label agency name, before
+    // falling back to the platform brand.
+    const fromName = branding?.fromName ?? branding?.agencyName ?? "Aurum Growth OS";
     const fromEmail = getFromEmail();
     const subject = `Your ${monthName(month)} ${year} Performance Report — ${fromName}`;
 
