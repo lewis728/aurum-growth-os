@@ -12,6 +12,9 @@
 
 import { prisma } from "@/lib/prisma";
 import OpenAI from "openai";
+import { aggregateObjections } from "@/lib/services/objectionService";
+import { getSeasonalStrength } from "@/lib/services/insightsService";
+import { ServiceVertical } from "@/enums/campaignEnums";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -76,12 +79,26 @@ export async function generateMorningBriefing(
       ? "No standing instructions."
       : instructions.map(i => `- ${i.instruction}`).join("\n");
 
+    // Sprint 12 + 13: weekly objection pattern + seasonal campaign opportunity.
+    const [topObjections, seasonal] = await Promise.all([
+      aggregateObjections(blueprintId, tenantId, { days: 7, limit: 1 }),
+      getSeasonalStrength(blueprint.vertical as ServiceVertical),
+    ]);
+    const objectionLine = topObjections.length > 0
+      ? `\n- Most common objection this week: ${topObjections[0].objection} (heard ${topObjections[0].count} times)`
+      : "";
+    const seasonalLine = seasonal.isStrong
+      ? `\n- Seasonal note: ${seasonal.monthName} is historically strong for ${blueprint.vertical} (CPL ~${seasonal.efficiencyPct}% below average) — a good month to launch a new campaign.`
+      : "";
+
     const context =
       `Overnight data (last 24 hours):\n` +
       `- New leads generated: ${leadCount}\n` +
       `- Appointments booked: ${appointmentCount}\n` +
       `- Actions you took:\n${actionsText}\n` +
-      `- Standing instructions from the agency owner:\n${instructionsText}`;
+      `- Standing instructions from the agency owner:\n${instructionsText}` +
+      objectionLine +
+      seasonalLine;
 
     const systemPrompt =
       `You are ${agentName}, an AI media buyer managing ${blueprint.businessName}. ` +

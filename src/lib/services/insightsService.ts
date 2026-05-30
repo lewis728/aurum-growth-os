@@ -100,6 +100,78 @@ export async function getVerticalCPLBenchmark(vertical: ServiceVertical): Promis
   }
 }
 
+// ── getSeasonalStrength (Sprint 13) ─────────────────────────────────────────────
+
+export interface SeasonalStrength {
+  isStrong:      boolean;
+  month:         number;
+  monthName:     string;
+  currentCplGbp: number | null;
+  avgCplGbp:     number | null;
+  efficiencyPct: number | null; // % the current month's CPL sits BELOW the yearly average
+}
+
+/**
+ * Determines whether the current calendar month is historically strong for a
+ * vertical — its mean CPL across stored campaigns is at least 20% below the
+ * all-months average (lower CPL = more efficient = stronger month).
+ * Derived from VerticalProfile.performanceData campaigns (finalCplGbp + recordedAt).
+ * NEVER throws — returns a non-strong default on any error / insufficient data.
+ */
+export async function getSeasonalStrength(vertical: ServiceVertical): Promise<SeasonalStrength> {
+  const now       = new Date();
+  const month     = now.getMonth() + 1;
+  const monthName = now.toLocaleString("en-GB", { month: "long" });
+  const fallback: SeasonalStrength = {
+    isStrong: false, month, monthName, currentCplGbp: null, avgCplGbp: null, efficiencyPct: null,
+  };
+
+  try {
+    const profile = await prisma.verticalProfile.findUnique({
+      where:  { vertical: vertical as string },
+      select: { performanceData: true },
+    });
+    if (!profile) return fallback;
+
+    const campaigns = parseCampaigns(profile.performanceData);
+    if (campaigns.length < 6) return fallback; // not enough history to judge seasonality
+
+    // Group CPLs by month-of-year.
+    const byMonth = new Map<number, number[]>();
+    for (const c of campaigns) {
+      if (typeof c.finalCplGbp !== "number" || isNaN(c.finalCplGbp) || c.finalCplGbp <= 0) continue;
+      if (!c.recordedAt) continue;
+      const m = new Date(c.recordedAt).getMonth() + 1;
+      if (Number.isNaN(m)) continue;
+      const arr = byMonth.get(m) ?? [];
+      arr.push(c.finalCplGbp);
+      byMonth.set(m, arr);
+    }
+
+    const currentCpls = byMonth.get(month);
+    if (!currentCpls || currentCpls.length === 0) return fallback;
+
+    const monthlyMeans = Array.from(byMonth.values()).map((arr) => avg(arr));
+    const overallAvg   = avg(monthlyMeans);
+    if (overallAvg <= 0) return fallback;
+
+    const currentCpl    = avg(currentCpls);
+    const efficiencyPct = Math.round(((overallAvg - currentCpl) / overallAvg) * 100);
+
+    return {
+      isStrong:      efficiencyPct >= 20,
+      month,
+      monthName,
+      currentCplGbp: Math.round(currentCpl * 100) / 100,
+      avgCplGbp:     Math.round(overallAvg * 100) / 100,
+      efficiencyPct,
+    };
+  } catch (err) {
+    console.error("[insightsService.getSeasonalStrength] failed:", err instanceof Error ? err.message : err);
+    return fallback;
+  }
+}
+
 // ── getCreativeStylePerformance ───────────────────────────────────────────────
 
 /**

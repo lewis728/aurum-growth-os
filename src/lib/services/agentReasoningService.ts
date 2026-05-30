@@ -17,7 +17,7 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { ServiceVertical } from "@/enums/campaignEnums";
-import { getVerticalInsightsSummary } from "@/lib/services/insightsService";
+import { getVerticalInsightsSummary, getSeasonalStrength } from "@/lib/services/insightsService";
 import {
   getCampaignInsights,
   pauseCampaign,
@@ -317,4 +317,29 @@ export async function runAgentReasoningCycle(
     reasoning:  `Campaign within normal parameters. CPL £${currentCpl.toFixed(2)} vs benchmark £${benchmarkCpl.toFixed(2)}. No intervention needed.`,
     outcome:    "Monitoring",
   });
+
+  // Sprint 13: additive proactive suggestion — independent of the decision above.
+  // If the current month is historically strong for this vertical, recommend a new
+  // campaign. Deduped to once per ~20h so the 4-hourly cycle doesn't spam.
+  try {
+    const recentSuggestion = blueprint.agentActions.find(
+      (a) => a.actionType === "CAMPAIGN_SUGGESTION" &&
+             a.executedAt.getTime() > Date.now() - 20 * 60 * 60 * 1000
+    );
+    if (!recentSuggestion) {
+      const seasonal = await getSeasonalStrength(blueprint.vertical as ServiceVertical);
+      if (seasonal.isStrong) {
+        await logAction({
+          actionType: "CAMPAIGN_SUGGESTION",
+          reasoning:
+            `Based on ${blueprint.vertical} data, ${seasonal.monthName} is a strong month for ${blueprint.vertical} ` +
+            `— CPL runs about ${seasonal.efficiencyPct}% below the yearly average. ` +
+            `Recommend launching a new campaign to capture the seasonal demand.`,
+          outcome: "Suggested",
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[agentReasoning] seasonal suggestion failed:", err instanceof Error ? err.message : err);
+  }
 }
