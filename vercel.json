@@ -3,6 +3,7 @@
     { "path": "/api/cron/reminders",       "schedule": "* * * * *"  },
     { "path": "/api/cron/spend-fee",       "schedule": "0 8 1 * *"  },
     { "path": "/api/cron/monthly-report",  "schedule": "0 8 1 * *"  },
-    { "path": "/api/cron/performance-aggregation", "schedule": "0 3 * * 1" }
+    { "path": "/api/cron/performance-aggregation", "schedule": "0 3 * * 1" },
+    { "path": "/api/cron/agent-reasoning",         "schedule": "0 */4 * * *" }
   ]
 }

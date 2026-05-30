@@ -49,6 +49,7 @@ model CampaignBlueprint {
 
   leads            Lead[]
   appointments     Appointment[]
+  agentActions     AgentAction[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -312,6 +313,25 @@ model MonthlyReport {
 
   @@unique([tenantId, month, year])
   @@index([tenantId])
+}
+
+// ── AgentAction ──────────────────────────────────────────────────────────────
+// Append-only log of every autonomous decision the agent makes per blueprint.
+model AgentAction {
+  id           String            @id @default(cuid())
+  tenantId     String
+  blueprintId  String
+  agentName    String
+  actionType   String
+  reasoning    String            @db.Text
+  outcome      String
+  metricBefore Float?
+  metricAfter  Float?
+  executedAt   DateTime          @default(now())
+  blueprint    CampaignBlueprint @relation(fields: [blueprintId], references: [id])
+
+  @@index([tenantId, blueprintId])
+  @@index([executedAt])
 }
 
 // ── AIRepresentative ─────────────────────────────────────────────────────────
