@@ -13,6 +13,7 @@ import { prisma }      from "@/lib/prisma";
 import type { CallAnalysis }     from "@/types/voiceLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
 import { CampaignStatus } from "@/enums/campaignEnums";
+import { getCampaignSpendSummary } from "@/lib/services/metaAdsService";
 import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
@@ -119,6 +120,42 @@ function getMetaCampaignId(mediaBuying: unknown): string | null {
   if (!mediaBuying || typeof mediaBuying !== "object") return null;
   const mb = mediaBuying as Partial<MediaBuyingLayer>;
   return mb.metaAdIds?.campaignId ?? null;
+}
+
+// ── Sprint 8: real Meta spend, 30-min per-tenant cache ──────────────────────────
+interface MetaHero { spendToday: number | null; cplThisWeek: number | null }
+const META_CACHE_TTL_MS = 30 * 60 * 1000;
+const metaHeroCache = new Map<string, { at: number; value: MetaHero }>();
+
+async function getMetaHeroMetrics(tenantId: string, campaignIds: string[]): Promise<MetaHero> {
+  if (campaignIds.length === 0) return { spendToday: null, cplThisWeek: null };
+
+  const cached = metaHeroCache.get(tenantId);
+  if (cached && Date.now() - cached.at < META_CACHE_TTL_MS) return cached.value;
+
+  let spendToday = 0, weekSpend = 0, weekLeads = 0, anyData = false;
+  await Promise.all(
+    campaignIds.map(async (campaignId) => {
+      try {
+        const [today, week] = await Promise.all([
+          getCampaignSpendSummary(tenantId, campaignId, "today"),
+          getCampaignSpendSummary(tenantId, campaignId, "last_7d"),
+        ]);
+        spendToday += today.spendGbp; anyData = true;
+        weekSpend  += week.spendGbp;
+        weekLeads  += week.leads;
+      } catch {
+        /* skip this campaign — Meta unavailable */
+      }
+    })
+  );
+
+  const value: MetaHero = anyData
+    ? { spendToday: Math.round(spendToday * 100) / 100, cplThisWeek: weekLeads > 0 ? Math.round((weekSpend / weekLeads) * 100) / 100 : null }
+    : { spendToday: null, cplThisWeek: null };
+
+  metaHeroCache.set(tenantId, { at: Date.now(), value });
+  return value;
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -244,10 +281,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ? Math.round((spendTodayGbp * 7) / leadsThisWeekCount * 100) / 100
     : 0;
 
+  // Sprint 8: prefer real Meta Insights for spend + CPL; fall back to the
+  // budget-based estimate when Meta is unavailable.
+  const metaHero = await getMetaHeroMetrics(
+    tenantId,
+    liveBlueprints
+      .map((b) => getMetaCampaignId(b.mediaBuying))
+      .filter((id): id is string => id !== null)
+  );
+
   const heroMetrics: HeroMetrics = {
-    spendToday:     spendTodayGbp,
+    spendToday:     metaHero.spendToday ?? spendTodayGbp,
     leadsToday:     leadsToday,
-    cplThisWeek:    cplThisWeek,
+    cplThisWeek:    metaHero.cplThisWeek ?? cplThisWeek,
     bookedThisWeek: bookedThisWeek,
   };
 

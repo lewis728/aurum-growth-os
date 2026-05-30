@@ -380,6 +380,63 @@ export async function getCampaignInsights(
   );
 }
 
+// ── Typed spend summary wrapper (Sprint 8) ──────────────────────────────────────
+// getCampaignInsights returns the raw Meta response. This wrapper computes a
+// preset date range, unwraps `data[0]`, converts USD→GBP, and extracts lead
+// count from the `actions` array — returning a typed, UI-ready summary.
+
+const META_USD_TO_GBP = 0.787;
+
+export interface CampaignSpendSummary {
+  spendGbp: number;
+  leads:    number;
+  cplGbp:   number | null;
+}
+
+function insightsRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const data = raw.data;
+  if (Array.isArray(data) && data.length > 0 && data[0] && typeof data[0] === "object") {
+    return data[0] as Record<string, unknown>;
+  }
+  return raw;
+}
+
+function extractLeads(row: Record<string, unknown>): number {
+  const actions = row.actions;
+  if (!Array.isArray(actions)) return 0;
+  let leads = 0;
+  for (const a of actions) {
+    if (a && typeof a === "object") {
+      const { action_type, value } = a as { action_type?: string; value?: string };
+      if (action_type === "lead" || action_type === "onsite_conversion.lead_grouped") {
+        leads += Number.parseFloat(value ?? "0") || 0;
+      }
+    }
+  }
+  return leads;
+}
+
+export async function getCampaignSpendSummary(
+  tenantId: string,
+  campaignId: string,
+  preset: "today" | "last_7d"
+): Promise<CampaignSpendSummary> {
+  const now = new Date();
+  const fmt = (d: Date): string => d.toISOString().slice(0, 10);
+  const dateRange =
+    preset === "today"
+      ? { since: fmt(now), until: fmt(now) }
+      : { since: fmt(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)), until: fmt(now) };
+
+  const row      = insightsRow(await getCampaignInsights(campaignId, dateRange, tenantId));
+  const spendUsd = Number.parseFloat((row.spend as string) ?? "0") || 0;
+  const spendGbp = Math.round(spendUsd * META_USD_TO_GBP * 100) / 100;
+  const leads    = extractLeads(row);
+  const cplGbp   = leads > 0 ? Math.round((spendGbp / leads) * 100) / 100 : null;
+
+  return { spendGbp, leads, cplGbp };
+}
+
 /** Activates all components of a campaign (campaign + adset + ad). */
 export async function activateCampaign(
   metaAdIds: MetaAdIds,
