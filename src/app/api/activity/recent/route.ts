@@ -18,7 +18,7 @@ export async function GET(): Promise<NextResponse> {
   const items = leads.map((l) => ({
     type: "lead" as const,
     title: "New lead",
-    description: `${String((l as Record<string, unknown>).fullName ?? "Unknown")} submitted a form`,
+    description: `${`${l.firstName} ${l.lastName}`.trim()} submitted a form`,
     createdAt: String(l.createdAt),
   }));
 

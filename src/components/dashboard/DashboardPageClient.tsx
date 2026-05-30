@@ -4,6 +4,12 @@ import { useState, useEffect } from "react";
 import { SignedIn, SignedOut, RedirectToSignIn, UserButton } from "@clerk/nextjs";
 import ChatWorkspace from "@/components/dashboard/ChatWorkspace";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import LeadDesk from "@/components/dashboard/LeadDesk";
+import { LiveCallFeed } from "@/components/dashboard/LiveCallFeed";
+import { BookingTimeline } from "@/components/dashboard/BookingTimeline";
+import { SpendChart } from "@/components/dashboard/SpendChart";
+import { BillingCard } from "@/components/billing/BillingCard";
+import ConnectMetaButton from "@/components/onboarding/ConnectMetaButton";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ClientSummary {
@@ -366,23 +372,54 @@ function DashboardView() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
-
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="text-sm font-medium text-white">Clients</div>
-              <button onClick={() => setShowAddClient(true)} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">
-                + Add client
-              </button>
+        <div className="flex-1 overflow-y-auto p-5">
+          {activePage === "leads" && <LeadDesk />}
+          {activePage === "calls" && (
+            <LiveCallFeed calls={data?.recentCalls ?? []} isLoading={isLoading} />
+          )}
+          {activePage === "bookings" && (
+            <BookingTimeline bookings={data?.upcomingBookings ?? []} isLoading={isLoading} />
+          )}
+          {activePage === "analytics" && (
+            <SpendChart days={data?.spendChart ?? []} isLoading={isLoading} />
+          )}
+          {activePage === "billing" && <BillingCard />}
+          {activePage === "integrations" && (
+            <div className="space-y-4">
+              <ConnectMetaButton />
+              <div
+                className="rounded-lg border border-zinc-900 p-6 text-zinc-600 text-sm"
+                style={{ background: "#0d0d0d" }}
+              >
+                More integrations coming soon.
+              </div>
             </div>
-            <ClientCards onAddClient={() => setShowAddClient(true)} />
-          </div>
+          )}
+          {activePage !== "leads" &&
+            activePage !== "calls" &&
+            activePage !== "bookings" &&
+            activePage !== "analytics" &&
+            activePage !== "billing" &&
+            activePage !== "integrations" && (
+              <div className="space-y-5">
+                <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <ActivityFeed />
-            <BookingsPanel bookings={bookings} />
-          </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="text-sm font-medium text-white">Clients</div>
+                    <button onClick={() => setShowAddClient(true)} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">
+                      + Add client
+                    </button>
+                  </div>
+                  <ClientCards onAddClient={() => setShowAddClient(true)} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <ActivityFeed />
+                  <BookingsPanel bookings={bookings} />
+                </div>
+              </div>
+            )}
         </div>
       </div>
 
