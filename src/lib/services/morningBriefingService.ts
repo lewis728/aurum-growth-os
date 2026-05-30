@@ -15,6 +15,7 @@ import OpenAI from "openai";
 import { aggregateObjections } from "@/lib/services/objectionService";
 import { getSeasonalStrength } from "@/lib/services/insightsService";
 import { ServiceVertical } from "@/enums/campaignEnums";
+import { buildClientContext } from "@/lib/agents/clientContext";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 

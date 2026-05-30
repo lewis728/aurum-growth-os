@@ -120,6 +120,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     });
 
+    // Seed the ClientBrief from the website scrape so the agent starts with
+    // real knowledge on day one. The owner refines it later in the brief editor.
+    const scrape = body.websiteScrape ?? null;
+    const sellingPoints = scrape && Array.isArray(scrape.sellingPoints)
+      ? (scrape.sellingPoints as unknown[]).filter((s): s is string => typeof s === "string")
+      : [];
+    await tx.clientBrief.create({
+      data: {
+        blueprintId:          blueprint.id,
+        tenantId,
+        websiteSummary:       (scrape?.description as string | undefined)?.trim() || null,
+        idealCustomerProfile: (scrape?.targetCustomer as string | undefined)?.trim() || null,
+        brandTone:            (scrape?.tone as string | undefined)?.trim() || null,
+        keyUSPs:              sellingPoints.length ? sellingPoints.join("; ") : null,
+        clientContactName:    body.clientContactName?.trim() || null,
+        clientWhatsApp:       body.clientWhatsApp?.trim() || null,
+      },
+    });
+
     return { blueprint, rep };
   });
 

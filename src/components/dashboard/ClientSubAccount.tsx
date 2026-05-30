@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { CreativePanel } from "@/components/dashboard/CreativePanel";
+import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
 
 interface AgentAction {
   id:         string;
@@ -564,6 +565,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
           </button>
         </div>
       </div>
+
+      {/* Client knowledge brief */}
+      <ClientBriefPanel blueprintId={client.id} agentName={agentName} />
 
       {/* Creative generation (Higgsfield) */}
       <CreativePanel

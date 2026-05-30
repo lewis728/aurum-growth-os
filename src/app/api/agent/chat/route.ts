@@ -12,7 +12,8 @@ import { prisma } from "@/lib/prisma";
 import {
   getCampaignInsights,
 } from "@/lib/services/metaAdsService";
-import { buildClientBriefInjection, clientAgentPersona } from "@/lib/agents/clientAgent";
+import { clientAgentPersona } from "@/lib/agents/clientAgent";
+import { buildClientContext } from "@/lib/agents/clientContext";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   // ── 3. Fetch data in parallel ─────────────────────────────────────────────
-  const [blueprint, recentActions, activeInstructions, repRow, clientBrief] = await Promise.all([
+  const [blueprint, recentActions, activeInstructions, repRow, clientContext] = await Promise.all([
     prisma.campaignBlueprint.findFirst({
       where: { id: blueprintId, tenantId },
       select: {
@@ -79,9 +80,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       where:  { blueprintId },
       select: { repName: true },
     }),
-    prisma.clientBrief.findUnique({
-      where: { blueprintId },
-    }),
+    buildClientContext(blueprintId),
   ]);
 
   if (!blueprint) {
@@ -181,8 +180,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     : "None set.";
 
   // Client Account-Manager persona + this client's brief (Build 1).
-  const briefInjection = buildClientBriefInjection(clientBrief);
-  const briefBlock = briefInjection ? `${briefInjection}\n\n` : "";
+  const briefBlock = clientContext.promptBlock ? `${clientContext.promptBlock}\n\n` : "";
 
   const systemPrompt = `${clientAgentPersona(agentName, blueprint.businessName)} You speak in first person, are direct and confident, and always back up your statements with numbers. You are not a chatbot — you are a member of staff reporting to the agency owner.
 
