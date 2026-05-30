@@ -53,18 +53,25 @@ function fmtCurrency(n: number): string {
   return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function StatusBadge({ status }: { status: ClientSummary["status"] }) {
-  const map = {
-    live:    { label: "● Live",    cls: "bg-emerald-950 text-emerald-400 border-emerald-900" },
-    paused:  { label: "⏸ Paused",  cls: "bg-amber-950 text-amber-400 border-amber-900" },
-    pending: { label: "◌ Pending", cls: "bg-indigo-950 text-indigo-400 border-indigo-900" },
-    setup:   { label: "◌ Setup",   cls: "bg-zinc-900 text-zinc-500 border-zinc-800" },
+// 6px dot — no chip badge
+function StatusDot({ status }: { status: ClientSummary["status"] }) {
+  const color: Record<ClientSummary["status"], string> = {
+    live:    "#22c55e",
+    paused:  "#f59e0b",
+    pending: "#71717a",
+    setup:   "#52525b",
   };
-  const { label, cls } = map[status] ?? map.setup;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${cls}`}>
-      {label}
-    </span>
+    <span
+      style={{
+        display: "inline-block",
+        width: "6px",
+        height: "6px",
+        borderRadius: "50%",
+        background: color[status] ?? color.setup,
+        flexShrink: 0,
+      }}
+    />
   );
 }
 
@@ -76,10 +83,10 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
     { id: "campaigns", label: "Campaigns", icon: "▶" },
   ];
   const navIntel = [
-    { id: "leads",     label: "Leads",     icon: "↓" },
-    { id: "calls",     label: "AI Calls",  icon: "☎" },
-    { id: "bookings",  label: "Bookings",  icon: "📅" },
-    { id: "analytics", label: "Analytics", icon: "↗" },
+    { id: "leads",     label: "Leads",    icon: "↓" },
+    { id: "calls",     label: "AI Calls", icon: "☎" },
+    { id: "bookings",  label: "Bookings", icon: "📅" },
+    { id: "analytics", label: "Analytics",icon: "↗" },
   ];
   const navSys = [
     { id: "billing",      label: "Billing",      icon: "💳" },
@@ -87,62 +94,84 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
     { id: "settings",     label: "Settings",     icon: "⚙" },
   ];
 
-  const NavItem = ({ id, label, icon }: { id: string; label: string; icon: string }) => (
-    <button
-      onClick={() => onNavigate(id)}
-      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all text-left ${
-        activePage === id
-          ? "bg-zinc-800 text-zinc-100"
-          : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
-      }`}
-    >
-      <span className="text-sm leading-none w-4 text-center">{icon}</span>
-      <span className="flex-1">{label}</span>
-    </button>
+  const SectionLabel = ({ children }: { children: string }) => (
+    <div style={{ fontSize: "10px", color: "#444", textTransform: "uppercase", letterSpacing: "0.08em", padding: "0 12px", marginBottom: "2px" }}>
+      {children}
+    </div>
   );
 
+  const NavItem = ({ id, label, icon }: { id: string; label: string; icon: string }) => {
+    const active = activePage === id;
+    return (
+      <button
+        onClick={() => onNavigate(id)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          width: "100%",
+          height: "36px",
+          padding: "0 12px",
+          fontSize: "12px",
+          borderRadius: "6px",
+          textAlign: "left",
+          border: "none",
+          cursor: "pointer",
+          background: active ? "rgba(255,255,255,0.06)" : "transparent",
+          color: active ? "#fff" : "#666",
+          transition: "background 0.1s ease, color 0.1s ease",
+        }}
+        onMouseEnter={e => { if (!active) { e.currentTarget.style.color = "#999"; } }}
+        onMouseLeave={e => { if (!active) { e.currentTarget.style.color = "#666"; } }}
+      >
+        <span style={{ fontSize: "13px", lineHeight: 1, width: "16px", textAlign: "center", flexShrink: 0 }}>{icon}</span>
+        <span style={{ flex: 1 }}>{label}</span>
+      </button>
+    );
+  };
+
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-900">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "240px",
+        background: "#000",
+        borderRight: "1px solid rgba(255,255,255,0.07)",
+        flexShrink: 0,
+      }}
+    >
       {/* Wordmark */}
-      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-zinc-900">
-        <div className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold text-black" style={{ backgroundColor: "#C9A84C" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "16px 16px 14px" }}>
+        <div style={{ width: "22px", height: "22px", borderRadius: "5px", background: "#C9A84C", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#000", flexShrink: 0 }}>
           A
         </div>
-        <div>
-          <div className="text-sm font-medium text-white leading-none">Aurum</div>
-          <div className="text-[10px] text-zinc-600 leading-none mt-0.5">Growth OS</div>
-        </div>
+        <span style={{ fontSize: "14px", fontWeight: 500, color: "#fff", lineHeight: 1 }}>Aurum</span>
       </div>
 
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <div>
-          <div className="px-2.5 mb-1.5 text-[10px] uppercase tracking-widest text-zinc-700">Overview</div>
-          <div className="space-y-0.5">
-            {navMain.map(n => <NavItem key={n.id} {...n} />)}
-          </div>
+          <SectionLabel>Overview</SectionLabel>
+          {navMain.map(n => <NavItem key={n.id} {...n} />)}
         </div>
         <div>
-          <div className="px-2.5 mb-1.5 text-[10px] uppercase tracking-widest text-zinc-700">Intelligence</div>
-          <div className="space-y-0.5">
-            {navIntel.map(n => <NavItem key={n.id} {...n} />)}
-          </div>
+          <SectionLabel>Intelligence</SectionLabel>
+          {navIntel.map(n => <NavItem key={n.id} {...n} />)}
         </div>
         <div>
-          <div className="px-2.5 mb-1.5 text-[10px] uppercase tracking-widest text-zinc-700">System</div>
-          <div className="space-y-0.5">
-            {navSys.map(n => <NavItem key={n.id} {...n} />)}
-          </div>
+          <SectionLabel>System</SectionLabel>
+          {navSys.map(n => <NavItem key={n.id} {...n} />)}
         </div>
       </div>
 
       {/* User */}
-      <div className="border-t border-zinc-900 px-3 py-3">
-        <div className="flex items-center gap-2.5">
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <UserButton afterSignOutUrl="/" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-zinc-400 truncate">Agency Owner</div>
-            <div className="text-[10px] text-zinc-700">Aurum Growth OS</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "12px", color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Agency Owner</div>
           </div>
         </div>
       </div>
@@ -161,12 +190,24 @@ function KpiStrip({ data, isLoading }: { data: Record<string, unknown> | null | 
   ];
 
   return (
-    <div className="grid grid-cols-4 border border-zinc-900 rounded-lg overflow-hidden" style={{ background: "#0d0d0d" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", background: "#000" }}>
       {kpis.map((k, i) => (
-        <div key={k.label} className={`px-4 py-4 ${i < 3 ? "border-r border-zinc-900" : ""}`}>
-          <div className="text-[10px] uppercase tracking-widest text-zinc-700 mb-2">{k.label}</div>
-          <div className="text-xl font-medium text-white font-mono tracking-tight">{k.value}</div>
-          <div className="text-[11px] text-zinc-700 mt-1">{k.sub}</div>
+        <div
+          key={k.label}
+          style={{
+            padding: "20px 24px",
+            borderRight: i < 3 ? "1px solid rgba(255,255,255,0.06)" : "none",
+          }}
+        >
+          <div style={{ fontSize: "10px", color: "#444", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+            {k.label}
+          </div>
+          <div className="font-mono" style={{ fontSize: "22px", color: "#fff", fontWeight: 300, letterSpacing: "-0.02em", lineHeight: 1 }}>
+            {k.value}
+          </div>
+          <div style={{ fontSize: "11px", color: "#444", marginTop: "6px" }}>
+            {k.sub}
+          </div>
         </div>
       ))}
     </div>
@@ -187,47 +228,53 @@ function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void;
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-2.5">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
         {[0, 1].map(i => (
-          <div key={i} className="h-32 rounded-lg border border-zinc-900 bg-zinc-950 animate-pulse" />
+          <div key={i} style={{ height: "130px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", background: "#0a0a0a", animation: "pulse 2s infinite" }} />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
       {clients.map(c => (
         <div
           key={c.id}
           onClick={() => onSelectClient(c.id)}
-          className="rounded-lg border border-zinc-900 p-4 cursor-pointer transition-colors hover:border-zinc-700"
-          style={{ background: "#0d0d0d" }}
+          style={{
+            background: "#0a0a0a",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "8px",
+            padding: "16px",
+            cursor: "pointer",
+            transition: "border-color 0.15s ease",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
         >
-          <div className="flex items-start justify-between mb-3">
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
             <div>
-              <div className="text-sm font-medium text-white">{c.businessName}</div>
-              <div className="text-[11px] text-zinc-600 mt-0.5">{c.vertical}</div>
+              <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", lineHeight: 1.3 }}>{c.businessName}</div>
+              <div style={{ fontSize: "11px", color: "#555", marginTop: "3px" }}>{c.vertical}</div>
             </div>
-            <StatusBadge status={c.status} />
+            <StatusDot status={c.status} />
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div>
-              <div className="text-[10px] text-zinc-700 mb-0.5">Spend/day</div>
-              <div className="text-sm font-medium text-zinc-300 font-mono">{fmtCurrency(c.spendToday)}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-700 mb-0.5">Leads/wk</div>
-              <div className="text-sm font-medium text-zinc-300 font-mono">{c.leadsThisWeek}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-700 mb-0.5">CPL</div>
-              <div className="text-sm font-medium text-zinc-300 font-mono">{c.cpl != null ? fmtCurrency(c.cpl) : "—"}</div>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+            {[
+              { label: "Spend/day", value: fmtCurrency(c.spendToday) },
+              { label: "Leads/wk",  value: String(c.leadsThisWeek) },
+              { label: "CPL",       value: c.cpl != null ? fmtCurrency(c.cpl) : "—" },
+            ].map(m => (
+              <div key={m.label}>
+                <div style={{ fontSize: "11px", color: "#444", marginBottom: "2px" }}>{m.label}</div>
+                <div className="font-mono" style={{ fontSize: "12px", color: "#ccc" }}>{m.value}</div>
+              </div>
+            ))}
           </div>
-          <div className="flex justify-between items-center pt-2.5 border-t border-zinc-900">
-            <span className="text-[10px] text-zinc-700">Last lead</span>
-            <span className="text-[10px] text-zinc-600 font-mono">{timeAgo(c.lastLeadAt)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <span style={{ fontSize: "11px", color: "#444" }}>Last lead</span>
+            <span className="font-mono" style={{ fontSize: "11px", color: "#555" }}>{timeAgo(c.lastLeadAt)}</span>
           </div>
         </div>
       ))}
@@ -235,11 +282,24 @@ function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void;
       {/* Add client card */}
       <button
         onClick={onAddClient}
-        className="rounded-lg border border-dashed border-zinc-800 flex flex-col items-center justify-center gap-2 min-h-[130px] cursor-pointer transition-colors hover:border-yellow-900 group"
-        style={{ background: "#050505" }}
+        style={{
+          border: "1px dashed rgba(255,255,255,0.1)",
+          background: "#000",
+          borderRadius: "8px",
+          minHeight: "130px",
+          cursor: "pointer",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "6px",
+          transition: "border-color 0.15s ease",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
       >
-        <span className="text-2xl text-zinc-800 group-hover:text-zinc-600 transition-colors">+</span>
-        <span className="text-[11px] text-zinc-700 group-hover:text-zinc-500 transition-colors">Add new client</span>
+        <span style={{ fontSize: "20px", color: "#333", lineHeight: 1 }}>+</span>
+        <span style={{ fontSize: "11px", color: "#444" }}>Add new client</span>
       </button>
     </div>
   );
@@ -257,33 +317,32 @@ function ActivityFeed() {
   }, []);
 
   const iconMap: Record<string, string> = {
-    lead: "↓", call: "☎", booking: "📅", campaign: "▶", default: "·"
+    lead: "↓", call: "☎", booking: "📅", campaign: "▶", default: "·",
   };
 
   return (
-    <div className="rounded-lg border border-zinc-900 p-4" style={{ background: "#0d0d0d" }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium text-white">Recent activity</div>
-        <div className="text-[11px] text-zinc-700 cursor-pointer hover:text-zinc-400">View all →</div>
+    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Recent activity</div>
+        <div style={{ fontSize: "11px", color: "#444", cursor: "pointer" }}>View all →</div>
       </div>
       {items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-20 gap-1">
-          <div className="text-lg text-zinc-800">·</div>
-          <div className="text-[11px] text-zinc-800">No activity yet</div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "80px", gap: "4px" }}>
+          <div style={{ fontSize: "11px", color: "#333" }}>No activity yet</div>
         </div>
       ) : (
-        <div className="space-y-0">
+        <div>
           {items.slice(0, 5).map((item, i) => (
-            <div key={i} className="flex gap-2.5 py-2.5 border-b border-zinc-900 last:border-0">
-              <div className="w-6 h-6 rounded-md border border-zinc-800 flex items-center justify-center text-xs text-zinc-600 flex-shrink-0" style={{ background: "#111" }}>
+            <div key={i} style={{ display: "flex", gap: "10px", padding: "10px 0", borderBottom: i < Math.min(items.length, 5) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+              <div style={{ width: "22px", height: "22px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "#555", flexShrink: 0 }}>
                 {iconMap[item.type] ?? iconMap.default}
               </div>
               <div>
-                <div className="text-xs text-zinc-500 leading-snug">
-                  <span className="text-zinc-300 font-medium">{item.title}</span>
+                <div style={{ fontSize: "12px", color: "#888", lineHeight: 1.4 }}>
+                  <span style={{ color: "#ccc", fontWeight: 500 }}>{item.title}</span>
                   {item.description ? ` — ${item.description}` : ""}
                 </div>
-                <div className="text-[10px] text-zinc-700 mt-0.5">{timeAgo(item.createdAt)}</div>
+                <div style={{ fontSize: "10px", color: "#444", marginTop: "2px" }}>{timeAgo(item.createdAt)}</div>
               </div>
             </div>
           ))}
@@ -296,22 +355,22 @@ function ActivityFeed() {
 // ── Bookings panel ─────────────────────────────────────────────────────────────
 function BookingsPanel({ bookings }: { bookings: Booking[] }) {
   return (
-    <div className="rounded-lg border border-zinc-900 p-4" style={{ background: "#0d0d0d" }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium text-white">Upcoming bookings</div>
-        <div className="text-[11px] text-zinc-700 cursor-pointer hover:text-zinc-400">View all →</div>
+    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Upcoming bookings</div>
+        <div style={{ fontSize: "11px", color: "#444", cursor: "pointer" }}>View all →</div>
       </div>
       {bookings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-20 gap-1">
-          <div className="text-[11px] text-zinc-800">No upcoming bookings</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "80px" }}>
+          <div style={{ fontSize: "11px", color: "#333" }}>No upcoming bookings</div>
         </div>
       ) : (
-        <div className="space-y-0">
+        <div>
           {bookings.slice(0, 5).map((b, i) => (
-            <div key={i} className="flex items-center gap-2.5 py-2.5 border-b border-zinc-900 last:border-0">
-              <div className="text-[11px] text-zinc-600 font-mono w-10 flex-shrink-0">{b.time ?? "—"}</div>
-              <div className="flex-1 text-xs text-zinc-400 truncate">{b.name}</div>
-              <span className="text-[10px] text-emerald-500 bg-emerald-950 border border-emerald-900 px-1.5 py-0.5 rounded">{b.day ?? "Soon"}</span>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", borderBottom: i < Math.min(bookings.length, 5) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+              <div className="font-mono" style={{ fontSize: "11px", color: "#555", width: "36px", flexShrink: 0 }}>{b.time ?? "—"}</div>
+              <div style={{ flex: 1, fontSize: "12px", color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</div>
+              <span style={{ fontSize: "10px", color: "#22c55e", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.15)", padding: "1px 6px", borderRadius: "4px" }}>{b.day ?? "Soon"}</span>
             </div>
           ))}
         </div>
@@ -323,11 +382,11 @@ function BookingsPanel({ bookings }: { bookings: Booking[] }) {
 // ── Add Client Modal ───────────────────────────────────────────────────────────
 function AddClientModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.8)" }}>
-      <div className="rounded-xl border border-zinc-800 p-6 w-full max-w-lg mx-4" style={{ background: "#0d0d0d" }}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-medium text-white">Add new client</div>
-          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-lg leading-none">×</button>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}>
+      <div style={{ borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", padding: "24px", width: "100%", maxWidth: "520px", margin: "0 16px", background: "#0a0a0a" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Add new client</div>
+          <button onClick={onClose} style={{ color: "#555", background: "none", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
         <ChatWorkspace />
       </div>
@@ -345,30 +404,31 @@ function DashboardView() {
   const bookings: Booking[] = (data?.upcomingBookings ?? []).map((b) => ({
     name: b.leadName,
     time: new Date(b.slotTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-    day: new Date(b.slotTime).toLocaleDateString("en-GB", { weekday: "short" }),
+    day:  new Date(b.slotTime).toLocaleDateString("en-GB", { weekday: "short" }),
   }));
 
   return (
-    <div className="flex h-screen overflow-hidden bg-black">
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#000" }}>
       {/* Sidebar */}
-      <div className="w-[220px] flex-shrink-0">
-        <Sidebar activePage={activePage} onNavigate={setActivePage} />
-      </div>
+      <Sidebar activePage={activePage} onNavigate={(p) => { setActivePage(p); setSelectedClientId(null); }} />
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Topbar */}
-        <div className="flex items-center justify-between px-5 h-12 border-b border-zinc-900 flex-shrink-0" style={{ background: "#050505" }}>
-          <div className="text-sm font-medium text-white capitalize">{activePage}</div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 text-[11px] text-zinc-500 hover:border-zinc-700 transition-colors" style={{ background: "#111" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: "48px", background: "#000", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", textTransform: "capitalize" }}>
+            {selectedClientId ? "Client" : activePage}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 10px", height: "32px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", borderRadius: "6px", fontSize: "12px", color: "#666", cursor: "pointer" }}
+            >
               Search
-              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-600" style={{ background: "#1a1a1a" }}>⌘K</span>
+              <span className="font-mono" style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.08)", color: "#555", background: "rgba(255,255,255,0.03)" }}>⌘K</span>
             </button>
             <button
               onClick={() => setShowAddClient(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium text-black transition-opacity hover:opacity-90"
-              style={{ background: "#fff" }}
+              style={{ background: "#fff", color: "#000", fontSize: "13px", fontWeight: 500, padding: "0 12px", height: "32px", borderRadius: "8px", border: "none", cursor: "pointer" }}
             >
               + Add client
             </button>
@@ -376,25 +436,25 @@ function DashboardView() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div style={{ flex: 1, overflowY: "auto", background: "#000", padding: "24px" }}>
           {selectedClientId ? (
             <ClientSubAccount clientId={selectedClientId} onBack={() => setSelectedClientId(null)} />
           ) : (() => {
             switch (activePage) {
               case "dashboard":
                 return (
-                  <div className="space-y-5">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
                     <div>
-                      <div className="flex items-center justify-between mb-2.5">
-                        <div className="text-sm font-medium text-white">Clients</div>
-                        <button onClick={() => setShowAddClient(true)} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Clients</div>
+                        <button onClick={() => setShowAddClient(true)} style={{ fontSize: "11px", color: "#555", background: "none", border: "none", cursor: "pointer" }}>
                           + Add client
                         </button>
                       </div>
                       <ClientCards onAddClient={() => setShowAddClient(true)} onSelectClient={setSelectedClientId} />
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <ActivityFeed />
                       <BookingsPanel bookings={bookings} />
                     </div>
@@ -412,8 +472,8 @@ function DashboardView() {
                 return <BillingCard />;
               case "integrations":
                 return (
-                  <div className="space-y-4">
-                    <div className="text-sm font-medium text-white">Integrations</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Integrations</div>
                     <ConnectMetaButton />
                   </div>
                 );
@@ -421,8 +481,8 @@ function DashboardView() {
                 return <ClientOverview />;
               default:
                 return (
-                  <div className="flex items-center justify-center h-full">
-                    <span className="text-zinc-600">Coming soon</span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                    <span style={{ fontSize: "13px", color: "#444" }}>Coming soon</span>
                   </div>
                 );
             }
@@ -430,7 +490,6 @@ function DashboardView() {
         </div>
       </div>
 
-      {/* Add Client Modal */}
       {showAddClient && <AddClientModal onClose={() => setShowAddClient(false)} />}
     </div>
   );
