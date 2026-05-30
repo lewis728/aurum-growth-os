@@ -37,11 +37,11 @@ function streamFallback(message: string): Response {
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── Auth ─────────────────────────────────────────────────────────────────
-  const { orgId } = await auth();
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, orgId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   // ── OpenAI key check — stream fallback instead of JSON error ─────────────
   if (!process.env.OPENAI_API_KEY) {

@@ -12,11 +12,11 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const { orgId } = await auth();
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, orgId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const blueprintId = req.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {

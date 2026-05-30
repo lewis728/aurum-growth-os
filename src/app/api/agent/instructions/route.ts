@@ -13,11 +13,11 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const { orgId } = await auth();
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, orgId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const blueprintId = req.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {
@@ -33,11 +33,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { orgId } = await auth();
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, orgId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const body = (await req.json()) as { blueprintId?: string; instruction?: string };
   const { blueprintId, instruction } = body;
@@ -54,11 +54,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const { orgId } = await auth();
-  if (!orgId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, orgId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
