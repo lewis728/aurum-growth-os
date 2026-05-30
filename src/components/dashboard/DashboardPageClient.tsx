@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SignedIn, SignedOut, RedirectToSignIn, UserButton } from "@clerk/nextjs";
-import ChatWorkspace from "@/components/dashboard/ChatWorkspace";
+import AddClientWizard from "@/components/dashboard/AddClientWizard";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import LeadDesk from "@/components/dashboard/LeadDesk";
 import { LiveCallFeed } from "@/components/dashboard/LiveCallFeed";
@@ -290,16 +290,17 @@ function ClientCard({ c, onSelectClient }: { c: ClientSummary; onSelectClient: (
 }
 
 // ── Client cards ───────────────────────────────────────────────────────────────
-function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void; onSelectClient: (id: string) => void }) {
+function ClientCards({ onAddClient, onSelectClient, refreshSignal }: { onAddClient: () => void; onSelectClient: (id: string) => void; refreshSignal: number }) {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     fetch("/api/clients/list")
       .then(r => r.ok ? r.json() as Promise<{ clients: ClientSummary[] }> : Promise.resolve({ clients: [] }))
       .then(d => { setClients(d.clients ?? []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [refreshSignal]);
 
   if (loading) {
     return (
@@ -417,23 +418,10 @@ function BookingsPanel({ bookings }: { bookings: Booking[] }) {
   );
 }
 
-// ── Add Client Modal ───────────────────────────────────────────────────────────
-function AddClientModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}>
-      <div style={{ borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", padding: "24px", width: "100%", maxWidth: "520px", margin: "0 16px", background: "#0a0a0a" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Add new client</div>
-          <button onClick={onClose} style={{ color: "#555", background: "none", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1 }}>×</button>
-        </div>
-        <ChatWorkspace />
-      </div>
-    </div>
-  );
-}
+// AddClientModal replaced by AddClientWizard (see AddClientWizard.tsx)
 
 // ── Agency chief-of-staff agent (compact collapsible bar) ─────────────────────
-function AgencyAgent() {
+function AgencyAgent({ pendingMessage }: { pendingMessage?: string | null }) {
   const WELCOME = "Morning. I'm watching all your campaigns. Add your first client to get started — I'll manage everything from there.";
   const [chatMessages,  setChatMessages]  = useState<{ role: "user" | "agent"; content: string }[]>([
     { role: "agent", content: WELCOME },
@@ -443,6 +431,13 @@ function AgencyAgent() {
   const [isStreaming,   setIsStreaming]   = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pendingMessage) {
+      setChatMessages(prev => [...prev, { role: "agent", content: pendingMessage }]);
+      setIsExpanded(true);
+    }
+  }, [pendingMessage]);
 
   // Preview: last agent message, truncated
   const lastAgentContent = [...chatMessages].reverse().find(m => m.role === "agent")?.content ?? WELCOME;
@@ -559,10 +554,19 @@ function AgencyAgent() {
 
 // ── Main dashboard view ────────────────────────────────────────────────────────
 function DashboardView() {
-  const [activePage, setActivePage] = useState("dashboard");
-  const [showAddClient, setShowAddClient] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [activePage,           setActivePage]           = useState("dashboard");
+  const [showAddClient,        setShowAddClient]        = useState(false);
+  const [selectedClientId,     setSelectedClientId]     = useState<string | null>(null);
+  const [agentPendingMessage,  setAgentPendingMessage]  = useState<string | null>(null);
+  const [clientsRefreshSignal, setClientsRefreshSignal] = useState(0);
   const { data, isLoading } = useDashboardMetrics();
+
+  const handleClientAdded = (agentName: string, businessName: string) => {
+    setClientsRefreshSignal(s => s + 1);
+    setAgentPendingMessage(
+      `${agentName} is now live on ${businessName}'s landing page. ${agentName} will call every new lead within 60 seconds and book them straight into the calendar. I'll send you a morning briefing every day at 6am.`
+    );
+  };
 
   const bookings: Booking[] = (data?.upcomingBookings ?? []).map((b) => ({
     name: b.leadName,
@@ -615,13 +619,13 @@ function DashboardView() {
                           + Add client
                         </button>
                       </div>
-                      <ClientCards onAddClient={() => setShowAddClient(true)} onSelectClient={setSelectedClientId} />
+                      <ClientCards onAddClient={() => setShowAddClient(true)} onSelectClient={setSelectedClientId} refreshSignal={clientsRefreshSignal} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <ActivityFeed />
                       <BookingsPanel bookings={bookings} />
                     </div>
-                    <AgencyAgent />
+                    <AgencyAgent pendingMessage={agentPendingMessage} />
                   </div>
                 );
               case "leads":
@@ -654,7 +658,12 @@ function DashboardView() {
         </div>
       </div>
 
-      {showAddClient && <AddClientModal onClose={() => setShowAddClient(false)} />}
+      {showAddClient && (
+        <AddClientWizard
+          onClose={() => setShowAddClient(false)}
+          onSuccess={handleClientAdded}
+        />
+      )}
     </div>
   );
 }
