@@ -251,6 +251,35 @@ export async function getSubscriptionStatus(
   };
 }
 
+// ─── Tiered pricing (Sprint 7) ────────────────────────────────────────────────
+// Flat platform fee + per-client seats priced by tier.
+export const PRICING = {
+  platform:     97,   // £/month platform access
+  starter:      200,  // £/month per Starter client seat
+  full_service: 500,  // £/month per Full-service client seat
+} as const;
+
+export function computeMonthlyTotal(starterSeats: number, fullServiceSeats: number): number {
+  return PRICING.platform + starterSeats * PRICING.starter + fullServiceSeats * PRICING.full_service;
+}
+
+/**
+ * Whether the platform is usable for creating new clients.
+ * - No subscription row yet → true (onboarding grace; they subscribe later).
+ * - active → true.
+ * - trialing → true until trialEndsAt passes.
+ * - past_due / canceled → false.
+ */
+export function isPlatformActive(status: SubscriptionStatus | null): boolean {
+  if (!status) return true;
+  if (status.status === "active") return true;
+  if (status.status === "trialing") {
+    if (!status.trialEndsAt) return true;
+    return status.trialEndsAt.getTime() > Date.now();
+  }
+  return false;
+}
+
 // ─── createCheckoutSession ────────────────────────────────────────────────────
 
 /**

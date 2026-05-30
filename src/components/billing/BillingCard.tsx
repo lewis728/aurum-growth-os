@@ -1,180 +1,166 @@
 /**
  * src/components/billing/BillingCard.tsx
- * "use client" — three states: not subscribed, trialing, active.
- * White background, Aurum gold accent, Inter font.
- * Agency-owner copy throughout.
+ * "use client" — tiered billing: platform fee + per-client seats (Starter £200 /
+ * Full service £500). Renders subscription status, seat breakdown, monthly total,
+ * per-client upgrade, and checkout / portal CTAs.
  */
 "use client";
 
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import { useBillingStatus } from "@/hooks/useBillingStatus";
 
-function formatDate(iso: string | null): string {
+const card: CSSProperties = {
+  background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "8px", padding: "20px",
+};
+
+function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function StatusBadge({ status }: { status: string | null }) {
-  if (!status) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-        <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-        No subscription
-      </span>
-    );
-  }
-
-  const map: Record<string, { bg: string; dot: string; text: string; label: string }> = {
-    active: { bg: "bg-emerald-50", dot: "bg-emerald-500", text: "text-emerald-700", label: "Active" },
-    trialing: { bg: "bg-amber-50", dot: "bg-amber-400", text: "text-amber-700", label: "Trial" },
-    past_due: { bg: "bg-red-50", dot: "bg-red-500", text: "text-red-700", label: "Past due" },
-    canceled: { bg: "bg-gray-100", dot: "bg-gray-400", text: "text-gray-600", label: "Canceled" },
-  };
-
-  const style = map[status] ?? map.canceled;
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${style.bg} ${style.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-      {style.label}
-    </span>
-  );
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function BillingCard() {
-  const { billing, isLoading, refetch } = useBillingStatus();
-  const [isRedirecting, setIsRedirecting] = useState(false);
-
-  async function handleSubscribe() {
-    setIsRedirecting(true);
-    try {
-      const res = await fetch("/api/billing/checkout", { method: "POST" });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (data.url) {
-        window.open(data.url, "_blank");
-      } else {
-        console.error("[BillingCard] Checkout error:", data.error);
-      }
-    } catch (err) {
-      console.error("[BillingCard] Checkout fetch error:", err);
-    } finally {
-      setIsRedirecting(false);
-      setTimeout(() => void refetch(), 3000);
-    }
-  }
-
-  async function handleManage() {
-    setIsRedirecting(true);
-    try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (data.url) {
-        window.open(data.url, "_blank");
-      } else {
-        console.error("[BillingCard] Portal error:", data.error);
-      }
-    } catch (err) {
-      console.error("[BillingCard] Portal fetch error:", err);
-    } finally {
-      setIsRedirecting(false);
-    }
-  }
+  const { billing, isLoading, error, refetch } = useBillingStatus();
+  const [busy, setBusy] = useState<string | null>(null);
 
   if (isLoading) {
-    return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
-        <div className="mt-3 h-3 w-48 animate-pulse rounded bg-gray-100" />
-      </div>
-    );
+    return <div style={card}><div style={{ fontSize: "12px", color: "#444" }}>Loading billing…</div></div>;
+  }
+  if (error || !billing) {
+    return <div style={card}><div style={{ fontSize: "12px", color: "#ef4444" }}>Couldn&apos;t load billing.</div></div>;
   }
 
-  const subscribed = billing?.subscribed ?? false;
-  const isTrialing = billing?.status === "trialing";
-  const isPastDue = billing?.status === "past_due";
+  const subscribed = billing.subscribed;
+  const isTrialing = billing.status === "trialing";
+
+  async function redirect(endpoint: string, key: string) {
+    setBusy(key);
+    try {
+      const res = await fetch(endpoint, { method: "POST" });
+      const data = (await res.json()) as { url?: string };
+      if (data.url) window.open(data.url, "_blank");
+    } catch {
+      /* swallow — button re-enables */
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function upgrade(blueprintId: string) {
+    setBusy(blueprintId);
+    try {
+      const res = await fetch("/api/clients/upgrade-tier", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ blueprintId }),
+      });
+      if (res.ok) refetch();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900">Aurum Platform</h3>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {subscribed
-              ? `${billing?.seatCount ?? 0} active client ${billing?.seatCount === 1 ? "seat" : "seats"}`
-              : "Manage your agency subscription"}
-          </p>
-        </div>
-        <StatusBadge status={billing?.status ?? null} />
-      </div>
-
-      {/* Pricing breakdown */}
-      <div className="mt-4 space-y-1.5 rounded-xl bg-gray-50 p-4">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">Platform access</span>
-          <span className="font-medium text-gray-900">£97 / month</span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">Per client seat</span>
-          <span className="font-medium text-gray-900">£500 / month</span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500">Ad spend management fee</span>
-          <span className="font-medium text-gray-900">5% of monthly spend</span>
-        </div>
-      </div>
-
-      {/* Trial / period info */}
-      {subscribed && (
-        <div className="mt-4 space-y-1">
-          {isTrialing && billing?.trialEndsAt && (
-            <p className="text-xs text-amber-600">
-              Trial ends {formatDate(billing.trialEndsAt)} — add a payment method to continue.
-            </p>
-          )}
-          {!isTrialing && billing?.currentPeriodEnd && (
-            <p className="text-xs text-gray-500">
-              Next billing date: {formatDate(billing.currentPeriodEnd)}
-            </p>
-          )}
-          {isPastDue && (
-            <p className="text-xs font-medium text-red-600">
-              Payment overdue — your client campaigns may be paused. Please update your payment method.
-            </p>
-          )}
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px", maxWidth: "560px" }}>
+      {/* Trial / no-subscription banner */}
+      {!subscribed && (
+        <div style={{ ...card, borderColor: "rgba(201,168,76,0.25)", background: "rgba(201,168,76,0.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+            <div>
+              <div style={{ fontSize: "13px", color: "#C9A84C", fontWeight: 600 }}>Start your 14-day free trial</div>
+              <div style={{ fontSize: "11px", color: "#777", marginTop: "3px" }}>
+                Month 1 is free. No setup fee. Cancel anytime.
+              </div>
+            </div>
+            <button
+              onClick={() => void redirect("/api/billing/checkout", "checkout")}
+              disabled={busy === "checkout"}
+              style={{ background: "#C9A84C", color: "#000", fontWeight: 600, fontSize: "12px", padding: "8px 16px", borderRadius: "8px", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              {busy === "checkout" ? "Redirecting…" : "Start free trial"}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* CTA */}
-      <div className="mt-5">
-        {!subscribed ? (
-          <button
-            onClick={() => void handleSubscribe()}
-            disabled={isRedirecting}
-            className="w-full rounded-xl bg-[#C9A84C] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {isRedirecting ? "Redirecting…" : "Start 14-day free trial"}
-          </button>
-        ) : (
-          <button
-            onClick={() => void handleManage()}
-            disabled={isRedirecting}
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-          >
-            {isRedirecting ? "Redirecting…" : "Manage subscription"}
-          </button>
-        )}
+      {isTrialing && billing.trialEndsAt && (
+        <div style={{ ...card, borderColor: "rgba(201,168,76,0.2)", background: "rgba(201,168,76,0.04)" }}>
+          <div style={{ fontSize: "12px", color: "#C9A84C" }}>
+            Free trial — ends {fmtDate(billing.trialEndsAt)}. Add a payment method to continue after.
+          </div>
+        </div>
+      )}
+
+      {/* Subscription summary */}
+      <div style={card}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Subscription</div>
+          {subscribed && (
+            <button
+              onClick={() => void redirect("/api/billing/portal", "portal")}
+              disabled={busy === "portal"}
+              style={{ fontSize: "11px", color: "#aaa", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px", padding: "5px 10px", cursor: "pointer" }}
+            >
+              {busy === "portal" ? "…" : "Manage"}
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginBottom: "8px" }}>
+          <span className="font-mono" style={{ fontSize: "28px", color: "#fff", fontWeight: 300 }}>£{billing.monthlyTotal}</span>
+          <span style={{ fontSize: "12px", color: "#555" }}>/month</span>
+        </div>
+        <div style={{ fontSize: "11px", color: "#555" }}>
+          Status: <span style={{ color: billing.platformActive ? "#22c55e" : "#f59e0b" }}>{billing.status ?? "no subscription"}</span>
+          {billing.nextBillingDate && <> · Next billing: <span className="font-mono">{fmtDate(billing.nextBillingDate)}</span></>}
+        </div>
       </div>
 
-      {/* Month 1 free note */}
-      {!subscribed && (
-        <p className="mt-3 text-center text-xs text-gray-400">
-          Month 1 is free. No setup fee. Cancel anytime.
-        </p>
+      {/* Seat breakdown */}
+      <div style={card}>
+        <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", marginBottom: "14px" }}>This month</div>
+        {([
+          ["Platform fee",                            billing.platformFee],
+          [`Starter × ${billing.starterSeats}`,       billing.starterSeats * billing.seatPrices.starter],
+          [`Full service × ${billing.fullServiceSeats}`, billing.fullServiceSeats * billing.seatPrices.full_service],
+        ] as [string, number][]).map(([label, amount], i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <span style={{ fontSize: "12px", color: "#888" }}>{label}</span>
+            <span className="font-mono" style={{ fontSize: "12px", color: "#ccc" }}>£{amount}</span>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "12px" }}>
+          <span style={{ fontSize: "13px", color: "#fff", fontWeight: 500 }}>Total</span>
+          <span className="font-mono" style={{ fontSize: "16px", color: "#fff", fontWeight: 500 }}>£{billing.monthlyTotal}/mo</span>
+        </div>
+      </div>
+
+      {/* Per-client seats with upgrade */}
+      {billing.clients.length > 0 && (
+        <div style={card}>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", marginBottom: "12px" }}>Clients</div>
+          {billing.clients.map(c => {
+            const isStarter = c.clientTier === "starter";
+            return (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div>
+                  <div style={{ fontSize: "12px", color: "#ccc" }}>{c.businessName}</div>
+                  <div style={{ fontSize: "11px", color: "#555", marginTop: "2px" }}>
+                    {isStarter ? "Starter · £200/mo" : "Full service · £500/mo"}
+                  </div>
+                </div>
+                {isStarter && (
+                  <button
+                    onClick={() => void upgrade(c.id)}
+                    disabled={busy === c.id}
+                    style={{ fontSize: "11px", color: "#C9A84C", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: "6px", padding: "5px 10px", cursor: busy === c.id ? "default" : "pointer" }}
+                  >
+                    {busy === c.id ? "Upgrading…" : "Upgrade → Full service"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

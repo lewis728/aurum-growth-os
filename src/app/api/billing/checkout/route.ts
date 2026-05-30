@@ -9,6 +9,7 @@ import {
   createOrRetrieveCustomer,
   createCheckoutSession,
 } from "@/lib/services/stripeService";
+import { isOwner } from "@/lib/access/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { userId, orgId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!(await isOwner())) return NextResponse.json({ error: "Owner role required" }, { status: 403 });
   const tenantId = orgId;
 
   try {

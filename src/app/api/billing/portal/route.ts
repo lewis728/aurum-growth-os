@@ -7,17 +7,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createBillingPortalSession } from "@/lib/services/stripeService";
 import { auth } from "@clerk/nextjs/server";
+import { isOwner } from "@/lib/access/roles";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { userId } = await auth();
+  const { userId, orgId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { orgId } = await auth();
   if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!(await isOwner())) return NextResponse.json({ error: "Owner role required" }, { status: 403 });
   const tenantId = orgId;
   if (!tenantId) {
     return NextResponse.json({ error: "No organisation found" }, { status: 400 });
