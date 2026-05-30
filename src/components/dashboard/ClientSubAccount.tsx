@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { CreativePanel } from "@/components/dashboard/CreativePanel";
 
 interface AgentAction {
   id:         string;
@@ -47,6 +48,11 @@ interface Briefing {
   briefingText: string | null;
   briefingAt:   string | null;
   agentName:    string;
+}
+
+interface ObjectionCount {
+  objection: string;
+  count:     number;
 }
 
 interface ClientSubAccountProps {
@@ -128,6 +134,7 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
   const [loading, setLoading] = useState(true);
   const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
+  const [objections, setObjections] = useState<ObjectionCount[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -152,6 +159,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
       fetch(`/api/agent/briefing?blueprintId=${encodeURIComponent(clientId)}`)
         .then((r) => r.ok ? r.json() as Promise<Briefing> : Promise.resolve(null))
         .then((d) => setBriefing(d)),
+      fetch(`/api/leads/objections?blueprintId=${encodeURIComponent(clientId)}`)
+        .then((r) => r.ok ? r.json() as Promise<{ objections: ObjectionCount[] }> : Promise.resolve({ objections: [] }))
+        .then((d) => setObjections(d.objections ?? [])),
     ]).finally(() => setLoading(false));
   }, [clientId]);
 
@@ -232,6 +242,14 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
     ? new Date(briefing.briefingAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : null;
 
+  // Sprint 13: surface the latest proactive campaign suggestion as a banner.
+  const campaignSuggestion = agentActions.find((a) => a.actionType === "CAMPAIGN_SUGGESTION") ?? null;
+
+  // Sprint 9: surface the agent's latest creative-fatigue flag on the creative panel.
+  const creativeRecommendation = agentActions.find(
+    (a) => a.actionType === "RECOMMEND_CREATIVE_REFRESH" || a.actionType === "FLAG_LOW_CTR"
+  ) ?? null;
+
   const kpis = [
     { label: "Spend today",      value: "£0",                  sub: "Live campaigns" },
     { label: "Leads this week",  value: String(leadsThisWeek), sub: "7-day window" },
@@ -298,6 +316,30 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
           </div>
         </div>
       </div>
+
+      {/* Campaign suggestion banner (Sprint 13) */}
+      {campaignSuggestion && (
+        <div
+          className="rounded-xl p-4 flex items-start justify-between gap-4"
+          style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.25)" }}
+        >
+          <div>
+            <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: "#C9A84C" }}>
+              Campaign suggestion
+            </div>
+            <div className="text-sm leading-relaxed" style={{ color: "var(--text-1)" }}>
+              {campaignSuggestion.reasoning}
+            </div>
+          </div>
+          <button
+            onClick={() => setChatInput(`Build the campaign you suggested for ${client.businessName}.`)}
+            className="flex-shrink-0 text-xs font-semibold rounded-lg px-3 py-2"
+            style={{ background: "#C9A84C", color: "#000", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            Build campaign →
+          </button>
+        </div>
+      )}
 
       {/* Morning briefing */}
       <div
@@ -426,6 +468,29 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
         )}
       </div>
 
+      {/* Objections (Sprint 12) */}
+      {objections.length > 0 && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
+        >
+          <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="text-sm font-medium" style={{ color: "var(--text-1)" }}>Top objections</div>
+            <div className="text-[11px]" style={{ color: "var(--text-3)" }}>Most common this week</div>
+          </div>
+          <div className="p-4 flex flex-col gap-2">
+            {objections.map((o) => (
+              <div key={o.objection} className="flex items-center justify-between">
+                <span className="text-sm capitalize" style={{ color: "var(--text-2)" }}>{o.objection}</span>
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full" style={{ background: "var(--surface-3)", color: "var(--text-3)" }}>
+                  {o.count}× heard
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Agent Chat */}
       <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
         {/* Header */}
@@ -499,6 +564,15 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
           </button>
         </div>
       </div>
+
+      {/* Creative generation (Higgsfield) */}
+      <CreativePanel
+        blueprintId={client.id}
+        agentName={agentName}
+        defaultBrief={`${client.businessName} — ${verticalLabel(client.vertical)}`}
+        recommended={creativeRecommendation !== null}
+        recommendationReason={creativeRecommendation?.reasoning}
+      />
     </div>
   );
 }

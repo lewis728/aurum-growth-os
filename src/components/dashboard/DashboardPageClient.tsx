@@ -12,6 +12,9 @@ import { BillingCard } from "@/components/billing/BillingCard";
 import ConnectMetaButton from "@/components/onboarding/ConnectMetaButton";
 import { ClientOverview } from "@/components/dashboard/ClientOverview";
 import ClientSubAccount from "@/components/dashboard/ClientSubAccount";
+import { LiveAgentFeed } from "@/components/dashboard/LiveAgentFeed";
+import BrandingConfig from "@/components/onboarding/BrandingConfig";
+import { TeamSettings } from "@/components/dashboard/TeamSettings";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ClientSummary {
@@ -626,6 +629,7 @@ function DashboardView() {
                       <BookingsPanel bookings={bookings} />
                     </div>
                     <AgencyAgent pendingMessage={agentPendingMessage} />
+                    <LiveAgentFeed />
                   </div>
                 );
               case "leads":
@@ -647,6 +651,15 @@ function DashboardView() {
                 );
               case "clients":
                 return <ClientOverview />;
+              case "settings":
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                    <TeamSettings />
+                    <div style={{ background: "#fff", borderRadius: "12px", overflow: "hidden" }}>
+                      <BrandingConfig />
+                    </div>
+                  </div>
+                );
               default:
                 return (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
