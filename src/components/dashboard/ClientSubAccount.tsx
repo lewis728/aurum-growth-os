@@ -1,6 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+
+interface AgentAction {
+  id:         string;
+  agentName:  string;
+  actionType: string;
+  reasoning:  string;
+  outcome:    string;
+  executedAt: string;
+}
+
+interface ChatMessage {
+  role:    "user" | "agent";
+  content: string;
+}
 
 interface ClientData {
   id: string;
@@ -87,11 +101,32 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
+function actionToMessage(action: AgentAction): string {
+  const map: Record<string, string> = {
+    PAUSE_CAMPAIGN:             "I paused the campaign.",
+    SCALE_BUDGET:               "I scaled the budget up.",
+    RECOMMEND_CREATIVE_REFRESH: "I flagged this for creative review.",
+    FLAG_LOW_CTR:               "I flagged a low CTR issue.",
+    NO_ACTION:                  "I checked in — everything looks normal.",
+    META_UNAVAILABLE:           "I couldn't reach Meta's API this cycle.",
+    NO_META_CAMPAIGN:           "No Meta campaign is linked yet.",
+  };
+  const prefix = map[action.actionType] ?? "I took action.";
+  return `${prefix} ${action.reasoning}`;
+}
+
 export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountProps): JSX.Element {
   const [client, setClient] = useState<ClientData | null>(null);
   const [leads,  setLeads]  = useState<Lead[]>([]);
   const [rep,    setRep]    = useState<Representative | null>(null);
   const [loading, setLoading] = useState(true);
+  const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [instructionConfirmed, setInstructionConfirmed] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -104,8 +139,65 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
       fetch(`/api/representative?blueprintId=${encodeURIComponent(clientId)}`)
         .then((r) => r.ok ? r.json() as Promise<Representative | null> : Promise.resolve(null))
         .then((d) => setRep(d)),
+      fetch(`/api/agent/actions?blueprintId=${encodeURIComponent(clientId)}`)
+        .then((r) => r.ok ? r.json() as Promise<{ actions: AgentAction[] }> : Promise.resolve({ actions: [] }))
+        .then((d) => setAgentActions(d.actions ?? [])),
     ]).finally(() => setLoading(false));
   }, [clientId]);
+
+  const handleSend = async () => {
+    const message = chatInput.trim();
+    if (!message || isStreaming) return;
+    setChatInput("");
+    setIsStreaming(true);
+    setInstructionConfirmed(false);
+    setChatMessages(prev => [...prev, { role: "user", content: message }]);
+
+    try {
+      const response = await fetch("/api/agent/chat", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ blueprintId: clientId, message }),
+      });
+
+      if (!response.ok || !response.body) {
+        setChatMessages(prev => [...prev, { role: "agent", content: "Something went wrong. Please try again." }]);
+        return;
+      }
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let agentText       = "";
+      let instructionFlag = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(raw) as { text?: string; instructionSaved?: boolean };
+            if (parsed.instructionSaved) instructionFlag = true;
+            if (parsed.text) {
+              agentText += parsed.text;
+              setStreamingText(agentText);
+            }
+          } catch { /* ignore malformed SSE lines */ }
+        }
+      }
+
+      setChatMessages(prev => [...prev, { role: "agent", content: agentText || "Done." }]);
+      setStreamingText("");
+      if (instructionFlag) setInstructionConfirmed(true);
+    } catch {
+      setChatMessages(prev => [...prev, { role: "agent", content: "Connection error. Please try again." }]);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -301,6 +393,80 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Agent Chat */}
+      <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--gold)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#000", flexShrink: 0 }}>
+            {initials(agentName)}
+          </div>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>{agentName}</div>
+            <div style={{ fontSize: "11px", color: "#555" }}>Ask anything about this campaign</div>
+          </div>
+        </div>
+
+        {/* Message history */}
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "340px", overflowY: "auto" }}>
+          {/* Past agent actions shown as agent messages */}
+          {agentActions.slice(0, 5).map((action) => (
+            <div key={action.id} style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "12px", color: "#666", lineHeight: 1.5 }}>
+                {actionToMessage(action)}
+                <div style={{ fontSize: "10px", color: "#333", marginTop: "4px" }}>{timeAgo(action.executedAt)}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Chat history */}
+          {chatMessages.map((msg, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", background: msg.role === "user" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "12px", color: msg.role === "user" ? "#ccc" : "#888", lineHeight: 1.5 }}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+
+          {/* Streaming token by token */}
+          {streamingText && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "12px", color: "#888", lineHeight: 1.5 }}>
+                {streamingText}
+                <span style={{ opacity: 0.4 }}>&#x258A;</span>
+              </div>
+            </div>
+          )}
+
+          {/* Instruction confirmed banner */}
+          {instructionConfirmed && (
+            <div style={{ fontSize: "11px", color: "#C9A84C", background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "6px", padding: "6px 10px", textAlign: "center" }}>
+              Got it. I&apos;ll apply that from my next check-in.
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: "8px" }}>
+          <input
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
+            placeholder={`Tell ${agentName} what you want...`}
+            disabled={isStreaming}
+            style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", color: "#ccc", outline: "none", fontFamily: "inherit" }}
+          />
+          <button
+            onClick={() => void handleSend()}
+            disabled={isStreaming || !chatInput.trim()}
+            style={{ background: isStreaming || !chatInput.trim() ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "8px 14px", fontSize: "12px", color: isStreaming || !chatInput.trim() ? "#333" : "#aaa", cursor: isStreaming || !chatInput.trim() ? "not-allowed" : "pointer", transition: "all 0.1s" }}
+          >
+            {isStreaming ? "…" : "Send"}
+          </button>
+        </div>
       </div>
     </div>
   );

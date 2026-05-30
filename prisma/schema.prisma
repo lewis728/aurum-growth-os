@@ -50,6 +50,7 @@ model CampaignBlueprint {
   leads            Lead[]
   appointments     Appointment[]
   agentActions     AgentAction[]
+  agentInstructions AgentInstruction[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -332,6 +333,20 @@ model AgentAction {
 
   @@index([tenantId, blueprintId])
   @@index([executedAt])
+}
+
+// ── AgentInstruction ──────────────────────────────────────────────────────────
+// Standing instructions from agency owner — applied in every reasoning cycle.
+model AgentInstruction {
+  id          String            @id @default(cuid())
+  tenantId    String
+  blueprintId String
+  instruction String            @db.Text
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  blueprint   CampaignBlueprint @relation(fields: [blueprintId], references: [id])
+
+  @@index([tenantId, blueprintId])
 }
 
 // ── AIRepresentative ─────────────────────────────────────────────────────────
