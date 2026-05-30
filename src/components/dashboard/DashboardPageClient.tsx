@@ -11,6 +11,7 @@ import { SpendChart } from "@/components/dashboard/SpendChart";
 import { BillingCard } from "@/components/billing/BillingCard";
 import ConnectMetaButton from "@/components/onboarding/ConnectMetaButton";
 import { ClientOverview } from "@/components/dashboard/ClientOverview";
+import ClientSubAccount from "@/components/dashboard/ClientSubAccount";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ClientSummary {
@@ -173,7 +174,7 @@ function KpiStrip({ data, isLoading }: { data: Record<string, unknown> | null | 
 }
 
 // ── Client cards ───────────────────────────────────────────────────────────────
-function ClientCards({ onAddClient }: { onAddClient: () => void }) {
+function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void; onSelectClient: (id: string) => void }) {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -199,6 +200,7 @@ function ClientCards({ onAddClient }: { onAddClient: () => void }) {
       {clients.map(c => (
         <div
           key={c.id}
+          onClick={() => onSelectClient(c.id)}
           className="rounded-lg border border-zinc-900 p-4 cursor-pointer transition-colors hover:border-zinc-700"
           style={{ background: "#0d0d0d" }}
         >
@@ -337,6 +339,7 @@ function AddClientModal({ onClose }: { onClose: () => void }) {
 function DashboardView() {
   const [activePage, setActivePage] = useState("dashboard");
   const [showAddClient, setShowAddClient] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const { data, isLoading } = useDashboardMetrics();
 
   const bookings: Booking[] = (data?.upcomingBookings ?? []).map((b) => ({
@@ -374,7 +377,9 @@ function DashboardView() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
-          {(() => {
+          {selectedClientId ? (
+            <ClientSubAccount clientId={selectedClientId} onBack={() => setSelectedClientId(null)} />
+          ) : (() => {
             switch (activePage) {
               case "dashboard":
                 return (
@@ -387,7 +392,7 @@ function DashboardView() {
                           + Add client
                         </button>
                       </div>
-                      <ClientCards onAddClient={() => setShowAddClient(true)} />
+                      <ClientCards onAddClient={() => setShowAddClient(true)} onSelectClient={setSelectedClientId} />
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
                       <ActivityFeed />

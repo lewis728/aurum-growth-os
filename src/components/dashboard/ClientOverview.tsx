@@ -1,42 +1,27 @@
 "use client";
-/**
- * src/components/dashboard/ClientOverview.tsx
- *
- * Table of all agency clients (CampaignBlueprint rows) with summary stats.
- * Fetches from GET /api/agency/clients.
- *
- * Columns: Client Name · Vertical · Status · Daily Budget · Leads · Appointments
- *
- * Design: white background, Aurum gold accent, Inter font.
- * Agency-owner framing — "your clients", "your client campaigns".
- */
 
 import { useState, useEffect } from "react";
 import type { ClientSummary } from "@/app/api/agency/clients/route";
 
-// ── Status badge ──────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
-  live:       "bg-green-50 text-green-700",
-  deploying:  "bg-blue-50 text-blue-700",
-  generating: "bg-purple-50 text-purple-700",
-  pending:    "bg-gray-50 text-gray-600",
-  paused:     "bg-amber-50 text-amber-700",
-  failed:     "bg-red-50 text-red-700",
-  archived:   "bg-gray-50 text-gray-400",
+  live:       "bg-green-950/50 text-green-400",
+  deploying:  "bg-blue-950/50 text-blue-400",
+  generating: "bg-purple-950/50 text-purple-400",
+  pending:    "bg-zinc-900 text-zinc-500",
+  paused:     "bg-amber-950/50 text-amber-400",
+  failed:     "bg-red-950/50 text-red-400",
+  archived:   "bg-zinc-900 text-zinc-600",
 };
 
 function StatusBadge({ status }: { status: string }): JSX.Element {
-  const style = STATUS_STYLES[status.toLowerCase()] ?? "bg-gray-50 text-gray-600";
+  const style = STATUS_STYLES[status.toLowerCase()] ?? "bg-zinc-900 text-zinc-500";
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${style}`}
-    >
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${style}`}>
       {status}
     </span>
   );
 }
 
-// ── Vertical label ────────────────────────────────────────────────────────────
 function verticalLabel(v: string): string {
   return v
     .replace(/_/g, " ")
@@ -44,7 +29,6 @@ function verticalLabel(v: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 export function ClientOverview(): JSX.Element {
   const [clients,  setClients]  = useState<ClientSummary[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -65,35 +49,32 @@ export function ClientOverview(): JSX.Element {
     })();
   }, []);
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-6 h-6 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--gold)", borderTopColor: "transparent" }} />
       </div>
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+      <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "var(--red)" }}>
         {error}
       </div>
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
   if (clients.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 bg-[#FAFAF9] px-6 py-12 text-center">
+      <div className="rounded-xl px-6 py-12 text-center" style={{ border: "1px dashed var(--border-strong)", background: "var(--surface-1)" }}>
         <div
           className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl"
-          style={{ backgroundColor: "#C9A84C1A" }}
+          style={{ background: "var(--gold-muted)" }}
         >
           <svg
             className="h-6 w-6"
-            style={{ color: "#C9A84C" }}
+            style={{ color: "var(--gold)" }}
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
@@ -106,60 +87,59 @@ export function ClientOverview(): JSX.Element {
             />
           </svg>
         </div>
-        <p className="text-sm font-semibold text-[#111827]">No clients yet</p>
-        <p className="mt-1 text-xs text-[#6B7280]">
+        <p className="text-sm font-semibold" style={{ color: "var(--text-1)" }}>No clients yet</p>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-3)" }}>
           Complete the onboarding flow to add your first client campaign.
         </p>
       </div>
     );
   }
 
-  // ── Table ─────────────────────────────────────────────────────────────────
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-100">
-      <table className="min-w-full divide-y divide-gray-100 text-sm">
-        <thead className="bg-[#FAFAF9]">
+    <div className="overflow-x-auto rounded-xl" style={{ border: "1px solid var(--border)" }}>
+      <table className="min-w-full divide-y text-sm" style={{ borderColor: "var(--border)" }}>
+        <thead style={{ background: "var(--surface-2)" }}>
           <tr>
-            {[
-              "Client Name",
-              "Vertical",
-              "Status",
-              "Daily Budget",
-              "Leads",
-              "Appointments",
-            ].map((h) => (
+            {["Client Name", "Vertical", "Status", "Daily Budget", "Leads", "Appointments"].map((h) => (
               <th
                 key={h}
-                className="px-4 py-3 text-left text-xs font-semibold text-[#6B7280] uppercase tracking-wide whitespace-nowrap"
+                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                style={{ color: "var(--text-3)" }}
               >
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-50 bg-white">
-          {clients.map((c) => (
-            <tr key={c.id} className="hover:bg-[#FAFAF9] transition-colors">
-              <td className="px-4 py-3 font-medium text-[#111827] whitespace-nowrap">
+        <tbody style={{ background: "var(--surface-1)" }}>
+          {clients.map((c, i) => (
+            <tr
+              key={c.id}
+              className="transition-colors"
+              style={{
+                borderTop: i > 0 ? "1px solid var(--border)" : "none",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-1)")}
+            >
+              <td className="px-4 py-3 font-medium whitespace-nowrap" style={{ color: "var(--text-1)" }}>
                 {c.businessName}
               </td>
-              <td className="px-4 py-3 text-[#374151] whitespace-nowrap">
+              <td className="px-4 py-3 whitespace-nowrap" style={{ color: "var(--text-2)" }}>
                 {verticalLabel(c.vertical)}
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
                 <StatusBadge status={c.status} />
               </td>
-              <td className="px-4 py-3 text-[#374151] whitespace-nowrap">
+              <td className="px-4 py-3 whitespace-nowrap font-mono" style={{ color: "var(--text-2)" }}>
                 £{c.dailyBudgetUsd.toFixed(2)}
-                <span className="text-xs text-[#9CA3AF]">/day</span>
+                <span className="text-xs" style={{ color: "var(--text-3)" }}>/day</span>
               </td>
-              <td className="px-4 py-3 text-[#374151]">
-                <span className="font-semibold text-[#111827]">{c.leadCount}</span>
+              <td className="px-4 py-3">
+                <span className="font-semibold font-mono" style={{ color: "var(--text-1)" }}>{c.leadCount}</span>
               </td>
-              <td className="px-4 py-3 text-[#374151]">
-                <span className="font-semibold text-[#111827]">
-                  {c.appointmentCount}
-                </span>
+              <td className="px-4 py-3">
+                <span className="font-semibold font-mono" style={{ color: "var(--text-1)" }}>{c.appointmentCount}</span>
               </td>
             </tr>
           ))}

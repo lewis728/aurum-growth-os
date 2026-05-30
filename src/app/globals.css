@@ -1,111 +1,70 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --background:    #FFFFFF;
-  --foreground:    #0A0A0A;
-
-  /* Aurum Gold */
-  --color-gold:        #C9A84C;
-  --color-gold-light:  #D4B86A;
-  --color-gold-dark:   #A8892E;
-  --color-gold-muted:  rgba(201, 168, 76, 0.12);
-
-  /* Neutral palette */
-  --color-surface:     #F9F9F9;
-  --color-border:      #E5E7EB;
-  --color-border-soft: #F3F4F6;
-  --color-text-muted:  #6B7280;
-  --color-text-subtle: #9CA3AF;
-
-  /* Status colours */
-  --color-success:     #10B981;
-  --color-warning:     #F59E0B;
-  --color-error:       #EF4444;
-  --color-info:        #3B82F6;
-
-  /* Shadows */
-  --shadow-card:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-panel: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --bg: #000000;
+  --surface-1: #0a0a0a;
+  --surface-2: #111111;
+  --surface-3: #1a1a1a;
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.10);
+  --text-1: #ffffff;
+  --text-2: #a1a1aa;
+  --text-3: #52525b;
+  --gold: #C9A84C;
+  --gold-muted: rgba(201,168,76,0.08);
+  --green: #22c55e;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --radius: 8px;
+  --radius-lg: 12px;
 }
 
-/* ── Base Reset ─────────────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
-
+  * { box-sizing: border-box; }
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11" 1, "ss01" 1;
   }
+  body { background: var(--bg); color: var(--text-1); }
 
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-    font-family: 'Inter', system-ui, sans-serif;
-  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-text-subtle);
-  }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
 }
 
-/* ── Utility Layer ──────────────────────────────────────────────────────────── */
 @layer utilities {
-  .text-gold {
-    color: var(--color-gold);
+  .glass {
+    background: rgba(255,255,255,0.02);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
   }
-
-  .bg-gold {
-    background-color: var(--color-gold);
+  .glass-strong {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid var(--border-strong);
   }
-
-  .border-gold {
-    border-color: var(--color-gold);
+  .surface { background: var(--surface-1); border: 1px solid var(--border); }
+  .surface-2 { background: var(--surface-2); border: 1px solid var(--border); }
+  .text-gold { color: var(--gold); }
+  .bg-gold { background: var(--gold); }
+  .text-muted { color: var(--text-2); }
+  .text-subtle { color: var(--text-3); }
+  .aurum-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s ease;
   }
-
-  .bg-gold-muted {
-    background-color: var(--color-gold-muted);
-  }
-
-  .ring-gold {
-    --tw-ring-color: var(--color-gold);
-  }
-
-  /* Aurum card base */
-  .card-aurum {
-    background-color: #FFFFFF;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    box-shadow: var(--shadow-card);
-  }
-
-  /* Gold gradient text */
-  .text-gradient-gold {
-    background: linear-gradient(135deg, var(--color-gold), var(--color-gold-light));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
+  .aurum-card:hover { border-color: var(--border-strong); }
 }
