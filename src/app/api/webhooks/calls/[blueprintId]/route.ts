@@ -11,10 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { queueAppointmentReminders } from "@/lib/services/twilioService";
+import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioService";
+import { extractObjections } from "@/lib/services/objectionService";
 import type { LeadStatus } from "@/types/lead";
 
 export const dynamic = "force-dynamic";
@@ -107,7 +107,7 @@ export async function POST(
     try {
       // Resolve lead — prefer the reliable Retell call_id correlation, then fall
       // back to the analysis-supplied identifiers.
-      const select = { id: true, tenantId: true } as const;
+      const select = { id: true, tenantId: true, firstName: true } as const;
       let lead =
         callId
           ? await prisma.lead.findFirst({ where: { retellCallId: callId, blueprintId }, select })
@@ -123,6 +123,31 @@ export async function POST(
         console.warn("[calls webhook] Lead not found:", { callId, leadId, leadPhone, blueprintId });
         return;
       }
+
+      // Blueprint context for SMS copy (business name + landing page link).
+      const blueprint = await prisma.campaignBlueprint.findUnique({
+        where:  { id: blueprintId },
+        select: { businessName: true, deployment: true },
+      });
+      const businessName = blueprint?.businessName ?? "us";
+      const landingUrl   = (blueprint?.deployment as { websiteUrl?: string } | null)?.websiteUrl ?? null;
+      const leadPhoneForSms = analysis.leadPhone;
+
+      // Best-effort SMS — never blocks lead/appointment persistence.
+      const safeSms = async (body: string) => {
+        if (!leadPhoneForSms) return;
+        try { await sendDirectSMS(leadPhoneForSms, body); }
+        catch (e) { console.error("[calls webhook] post-call SMS failed:", e instanceof Error ? e.message : e); }
+      };
+
+      // Sprint 12: extract objections from the transcript (if any) and persist
+      // them inside callAnalysis. extractObjections never throws.
+      const transcript =
+        (typeof payload["transcript"] === "string" ? (payload["transcript"] as string) : null) ??
+        (payload["call"] as { transcript?: string } | undefined)?.transcript ??
+        "";
+      const objections = transcript ? await extractObjections(transcript) : [];
+      const callAnalysisData = { ...payload, objections } as object;
 
       // If appointment was booked and slotTime is valid future date
       if (
@@ -144,18 +169,34 @@ export async function POST(
           }),
           prisma.lead.update({
             where: { id: lead.id },
-            data:  { status: "booked", callAnalysis: payload as object },
+            data:  { status: "booked", callAnalysis: callAnalysisData },
           }),
         ]);
 
-        // Queue SMS reminders non-blocking
+        // Queue scheduled reminders (confirmation + day-before + hour-before).
         await queueAppointmentReminders(appointment.id, lead.id);
+
+        // Immediate post-call booked confirmation.
+        const when = new Date(analysis.appointmentSlotTime).toLocaleString("en-GB", {
+          weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+        });
+        await safeSms(
+          `Hi ${lead.firstName}, great speaking with you! Your appointment with ${businessName} is confirmed for ${when}. See you then.`
+        );
       } else {
         // Just update lead status
         await prisma.lead.update({
           where: { id: lead.id },
-          data:  { status: leadStatus, callAnalysis: payload as object },
+          data:  { status: leadStatus, callAnalysis: callAnalysisData },
         });
+
+        // Qualified but didn't book — nudge them to self-serve book.
+        if (leadStatus === "qualified") {
+          await safeSms(
+            `Hi ${lead.firstName}, ${businessName} would love to help.` +
+            (landingUrl ? ` Book your free consultation: ${landingUrl}` : " Reply here to book your free consultation.")
+          );
+        }
       }
     } catch (err) {
       console.error("[calls webhook] Processing error:", err instanceof Error ? err.message : err);

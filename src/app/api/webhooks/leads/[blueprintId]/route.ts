@@ -8,101 +8,14 @@
  * - NEVER throws — all errors return appropriate HTTP status
  */
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { triggerAutomations } from "@/lib/services/automationEngine";
-import { createPhoneCall, toE164 } from "@/lib/services/retellService";
-import { CampaignStatus } from "@/enums/campaignEnums";
+import { placeSpeedToLeadCall, computeLeadScore } from "@/lib/services/speedToLeadService";
 import type { CRMLayer } from "@/types/crmLayer";
 
 export const dynamic = "force-dynamic";
-
-// ── Speed-to-lead outbound call ──────────────────────────────────────────────
-// Places a Retell call within seconds of lead creation. Never throws — every
-// outcome (placed / skipped / failed) is recorded as an AgentAction so the
-// agency owner sees it in the feed. The webhook must still 200 regardless.
-
-interface SpeedToLeadBlueprint {
-  id:           string;
-  tenantId:     string;
-  status:       string;
-  businessName: string;
-  vertical:     string;
-  offerHook:    string | null;
-  voice:        unknown;
-}
-
-async function triggerSpeedToLeadCall(
-  blueprint: SpeedToLeadBlueprint,
-  lead: { id: string; firstName: string; lastName: string; phone: string }
-): Promise<void> {
-  const rep = await prisma.aIRepresentative.findUnique({
-    where:  { blueprintId: blueprint.id },
-    select: { repName: true },
-  });
-  const agentName = rep?.repName ?? "Sophie";
-
-  const logAction = (actionType: string, reasoning: string, outcome: string) =>
-    prisma.agentAction
-      .create({ data: { tenantId: blueprint.tenantId, blueprintId: blueprint.id, agentName, actionType, reasoning, outcome } })
-      .catch((e: unknown) => console.error("[leads webhook] AgentAction log failed:", e));
-
-  try {
-    const fromNumber = process.env.RETELL_FROM_NUMBER;
-    const agentId =
-      (blueprint.voice as { retellAgentId?: string } | null)?.retellAgentId ||
-      process.env.RETELL_AGENT_ID;
-
-    if (!fromNumber || !agentId) {
-      await logAction(
-        "CALL_FAILED",
-        `Could not call ${lead.firstName} ${lead.lastName}: Retell is not configured (missing ${!fromNumber ? "from number" : "agent id"}).`,
-        "Call skipped — Retell not configured"
-      );
-      return;
-    }
-
-    const toNumber = toE164(lead.phone);
-    if (!toNumber) {
-      await logAction(
-        "CALL_FAILED",
-        `Could not call ${lead.firstName} ${lead.lastName}: phone number "${lead.phone}" is not a valid number.`,
-        "Call skipped — invalid phone number"
-      );
-      return;
-    }
-
-    const { callId } = await createPhoneCall({
-      fromNumber,
-      toNumber,
-      agentId,
-      dynamicVariables: {
-        lead_first_name:     lead.firstName,
-        business_name:       blueprint.businessName,
-        vertical:            blueprint.vertical,
-        agent_name:          agentName,
-        service_description: blueprint.offerHook ?? "",
-      },
-    });
-
-    await prisma.lead.update({ where: { id: lead.id }, data: { retellCallId: callId } });
-    await logAction(
-      "CALL_INITIATED",
-      `Called ${lead.firstName} ${lead.lastName} within 60 seconds of form submission.`,
-      "Call placed"
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[leads webhook] Retell call failed:", msg);
-    await logAction(
-      "CALL_FAILED",
-      `Tried to call ${lead.firstName} ${lead.lastName} but the call could not be placed: ${msg}`,
-      "Call failed"
-    );
-  }
-}
 
 // ── Null guard — fail fast at module load if secret is missing ────────────────
 const secret = process.env.LEAD_WEBHOOK_SECRET;
@@ -182,6 +95,9 @@ export async function POST(
 
   const { firstName, lastName } = parseFullName(payload);
 
+  // ── Lead intent score (Sprint 11) ─────────────────────────────────────────
+  const leadScore = computeLeadScore({ at: new Date(), formData: payload.formData ?? null });
+
   // ── Create lead ───────────────────────────────────────────────────────────
   let lead: { id: string; firstName: string; lastName: string; phone: string; tenantId: string };
   try {
@@ -194,6 +110,7 @@ export async function POST(
         phone:       payload.phone,
         email:       payload.email,
         status:      "new",
+        leadScore,
         formData:    (payload.formData ?? {}) as object,
       },
       select: { id: true, firstName: true, lastName: true, phone: true, tenantId: true },
@@ -206,10 +123,13 @@ export async function POST(
 
   // ── Speed-to-lead: Sophie calls within 60 seconds ────────────────────────
   // Awaited (not fire-and-forget) so the call is guaranteed to be placed even
-  // on serverless, where post-response work can be killed. Never throws.
-  if (blueprint.status === CampaignStatus.LIVE) {
-    await triggerSpeedToLeadCall(blueprint, lead);
-  }
+  // on serverless, where post-response work can be killed. Never throws; the
+  // service skips non-LIVE blueprints internally.
+  await placeSpeedToLeadCall({
+    blueprintId: blueprint.id,
+    tenantId:    blueprint.tenantId,
+    lead,
+  });
 
   // ── Trigger automations (fire-and-forget) ─────────────────────────────────
   setImmediate(() => {

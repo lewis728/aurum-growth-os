@@ -24,6 +24,9 @@ model CampaignBlueprint {
   businessName     String
   targetLocation   String
   dailyBudgetUsd   Float
+  clientTier       String   @default("full_service") // starter | full_service — drives per-seat billing
+  clientContactName String? // The agency's client contact (for WhatsApp updates)
+  clientWhatsApp    String? // E.164 WhatsApp number for monthly summary messages
   creative         Json     // CreativeLayer
   mediaBuying      Json     // MediaBuyingLayer
   deployment       Json     // DeploymentLayer
@@ -92,6 +95,8 @@ model Lead {
   status          String   @default("new") // LeadStatus enum stored as string
   source          String   @default("landing_page") // landing_page | calendly | manual
   retellCallId    String?  // Retell call_id from the speed-to-lead outbound call
+  callAttempts    Int      @default(0) // Number of outbound call attempts placed
+  leadScore       Int?     // 1-10 intent score computed at webhook receipt
   callAnalysis    Json?    // CallAnalysis from Retell post-call webhook
   formData        Json?    // Raw form fields from landing page
   createdAt       DateTime @default(now())
