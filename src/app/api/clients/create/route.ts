@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { getSubscriptionStatus, isPlatformActive } from "@/lib/services/stripeService";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,12 @@ interface CreateBody {
   isExistingCampaign:  boolean;
   existingCampaignIds?: string[];
   websiteScrape?:      Record<string, unknown>;
+  clientTier?:         string;
+  clientContactName?:  string;
+  clientWhatsApp?:     string;
 }
+
+const VALID_TIERS = new Set(["starter", "full_service"]);
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const { userId, orgId } = await auth();
@@ -51,6 +57,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "agentName is required" }, { status: 400 });
   }
 
+  // Gate: once the 14-day trial ends (past_due / canceled / expired trial), a
+  // live payment method is required before deploying further clients. Tenants
+  // with no subscription row yet are in onboarding grace and allowed through.
+  const subscription = await getSubscriptionStatus(tenantId);
+  if (!isPlatformActive(subscription)) {
+    return NextResponse.json(
+      { error: "Please add a payment method to continue." },
+      { status: 402 }
+    );
+  }
+
   const dailyBudgetUsd = (body.dailyBudgetGbp ?? 50) * GBP_TO_USD;
 
   const mediaBuying: Record<string, unknown> = {};
@@ -63,34 +80,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (body.websiteUrl) deployment.websiteUrl = body.websiteUrl;
   if (body.websiteScrape) deployment.websiteScrape = body.websiteScrape;
 
-  const blueprint = await prisma.campaignBlueprint.create({
-    data: {
-      tenantId,
-      pendingOrgLink,
-      status:         "pending",
-      vertical:       body.vertical || "other",
-      businessName:   body.businessName.trim(),
-      targetLocation: body.targetLocation?.trim() || "UK",
-      dailyBudgetUsd,
-      creative:       {},
-      mediaBuying: mediaBuying as Prisma.InputJsonValue,
-      deployment:  deployment  as Prisma.InputJsonValue,
-      voice:          {},
-      crm:            {},
-      offerHook:      body.offer?.trim() ?? null,
-      businessDescription: body.websiteScrape
-        ? (body.websiteScrape.description as string | undefined ?? body.offer?.trim() ?? null)
-        : (body.offer?.trim() ?? null),
-    },
-  });
+  const clientTier = body.clientTier && VALID_TIERS.has(body.clientTier)
+    ? body.clientTier
+    : "full_service";
 
-  const rep = await prisma.aIRepresentative.create({
-    data: {
-      blueprintId: blueprint.id,
-      tenantId,
-      repName:     body.agentName.trim(),
-      voiceId:     body.voiceId || "female-british",
-    },
+  // Atomic: a blueprint without its representative is a broken client, so
+  // create both in one transaction — either both land or neither does.
+  const { blueprint, rep } = await prisma.$transaction(async (tx) => {
+    const blueprint = await tx.campaignBlueprint.create({
+      data: {
+        tenantId,
+        pendingOrgLink,
+        status:         "pending",
+        clientTier,
+        vertical:       body.vertical || "other",
+        businessName:   body.businessName.trim(),
+        targetLocation: body.targetLocation?.trim() || "UK",
+        dailyBudgetUsd,
+        clientContactName: body.clientContactName?.trim() || null,
+        clientWhatsApp:    body.clientWhatsApp?.trim() || null,
+        creative:       {},
+        mediaBuying: mediaBuying as Prisma.InputJsonValue,
+        deployment:  deployment  as Prisma.InputJsonValue,
+        voice:          {},
+        crm:            {},
+        offerHook:      body.offer?.trim() ?? null,
+        businessDescription: body.websiteScrape
+          ? (body.websiteScrape.description as string | undefined ?? body.offer?.trim() ?? null)
+          : (body.offer?.trim() ?? null),
+      },
+    });
+
+    const rep = await tx.aIRepresentative.create({
+      data: {
+        blueprintId: blueprint.id,
+        tenantId,
+        repName:     body.agentName.trim(),
+        voiceId:     body.voiceId || "female-british",
+      },
+    });
+
+    return { blueprint, rep };
   });
 
   return NextResponse.json({ blueprintId: blueprint.id, agentName: rep.repName });

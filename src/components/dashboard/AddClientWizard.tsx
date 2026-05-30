@@ -49,7 +49,15 @@ interface WizardData {
   metaAdAccountId:     string;
   existingCampaignIds: string[];
   websiteScrape:       ScrapeResult | null;
+  clientTier:          string;
+  clientContactName:   string;
+  clientWhatsApp:      string;
 }
+
+const TIERS = [
+  { id: "full_service", name: "Full service", price: "£500/mo", desc: "Ads, calls, booking, reporting" },
+  { id: "starter",      name: "Starter",      price: "£200/mo", desc: "Calls & booking only" },
+];
 
 interface Props {
   onClose:   () => void;
@@ -86,6 +94,8 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
     vertical: "", agentName: "", voiceId: "female-british",
     dailyBudgetGbp: "50", metaAdAccountId: "",
     existingCampaignIds: [], websiteScrape: null,
+    clientTier: "full_service",
+    clientContactName: "", clientWhatsApp: "",
   });
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null);
   const [errors,     setErrors]     = useState<Record<string, string>>({});
@@ -177,6 +187,9 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
           isExistingCampaign: mode === "takeover",
           existingCampaignIds: data.existingCampaignIds,
           websiteScrape:      data.websiteScrape,
+          clientTier:         data.clientTier,
+          clientContactName:  data.clientContactName,
+          clientWhatsApp:     data.clientWhatsApp,
         }),
       });
       if (!res.ok) throw new Error("Deploy failed");
@@ -243,6 +256,21 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
           {VERTICALS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
         </select>
         <Err msg={errors.vertical} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div>
+          <Label>Client contact name</Label>
+          <input style={IS} placeholder="e.g. Jane Smith"
+            value={data.clientContactName} onChange={e => upd("clientContactName", e.target.value)} />
+        </div>
+        <div>
+          <Label>Client WhatsApp</Label>
+          <input style={IS} placeholder="+447…"
+            value={data.clientWhatsApp} onChange={e => upd("clientWhatsApp", e.target.value)} />
+        </div>
+      </div>
+      <div style={{ fontSize: "11px", color: "#444", marginTop: "-6px" }}>
+        Optional — we&apos;ll send them a monthly WhatsApp summary from your agent.
       </div>
     </div>
   );
@@ -365,6 +393,29 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
         </div>
       </div>
 
+      <div>
+        <Label>Plan</Label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+          {TIERS.map(t => {
+            const active = data.clientTier === t.id;
+            return (
+              <button key={t.id} onClick={() => upd("clientTier", t.id)} style={{
+                padding: "12px 14px", textAlign: "left", cursor: "pointer", transition: "all 0.1s",
+                background: active ? "rgba(201,168,76,0.08)" : "#111",
+                border: `1px solid ${active ? "#C9A84C" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: "8px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontSize: "13px", fontWeight: active ? 600 : 400, color: active ? "#C9A84C" : "#ccc" }}>{t.name}</span>
+                  <span className="font-mono" style={{ fontSize: "11px", color: active ? "#C9A84C" : "#666" }}>{t.price}</span>
+                </div>
+                <div style={{ fontSize: "11px", color: "#555", marginTop: "3px" }}>{t.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {data.agentName && (
         <div style={{ padding: "12px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px" }}>
           <div style={{ fontSize: "10px", color: "#444", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Preview</div>
@@ -387,6 +438,7 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
     ["Budget",   `£${data.dailyBudgetGbp}/day`],
     ["Agent",    data.agentName || "—"],
     ["Voice",    voiceLabel],
+    ["Plan",     TIERS.find(t => t.id === data.clientTier)?.name ?? "Full service"],
   ];
 
   const stepReview = (
