@@ -50,6 +50,18 @@ function LeadStatusBadge({ status }: { status: string }): JSX.Element {
   );
 }
 
+// Intent score 1-10 → green (7-10) / amber (4-6) / red (1-3).
+function ScoreDot({ score }: { score: number | null | undefined }): JSX.Element {
+  if (score == null) return <span className="text-xs text-gray-300">—</span>;
+  const color = score >= 7 ? "bg-emerald-500" : score >= 4 ? "bg-amber-400" : "bg-red-500";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-1.5 w-1.5 rounded-full ${color}`} />
+      <span className="text-xs text-gray-600 tabular-nums">{score}</span>
+    </span>
+  );
+}
+
 function SkeletonRow(): JSX.Element {
   return (
     <tr className="animate-pulse">
@@ -222,6 +234,7 @@ export default function LeadDesk(): JSX.Element {
                 <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Name</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Phone</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Quality</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Created</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Appointment</th>
               </tr>
@@ -242,6 +255,9 @@ export default function LeadDesk(): JSX.Element {
                   </td>
                   <td className="px-4 py-3">
                     <LeadStatusBadge status={lead.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <ScoreDot score={lead.leadScore} />
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-xs text-gray-500 whitespace-nowrap">{formatDateTime(lead.createdAt)}</p>

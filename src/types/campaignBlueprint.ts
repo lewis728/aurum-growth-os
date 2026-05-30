@@ -57,5 +57,6 @@ export interface BlueprintLead {
   phone:       string;
   email?:      string;
   status:      string;
+  leadScore?:  number | null;
   createdAt:   string;
 }
