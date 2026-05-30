@@ -117,12 +117,12 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
           textAlign: "left",
           border: "none",
           cursor: "pointer",
-          background: active ? "rgba(255,255,255,0.06)" : "transparent",
+          background: active ? "rgba(255,255,255,0.08)" : "transparent",
           color: active ? "#fff" : "#666",
           transition: "background 0.1s ease, color 0.1s ease",
         }}
-        onMouseEnter={e => { if (!active) { e.currentTarget.style.color = "#999"; } }}
-        onMouseLeave={e => { if (!active) { e.currentTarget.style.color = "#666"; } }}
+        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#999"; } }}
+        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#666"; } }}
       >
         <span style={{ fontSize: "13px", lineHeight: 1, width: "16px", textAlign: "center", flexShrink: 0 }}>{icon}</span>
         <span style={{ flex: 1 }}>{label}</span>
@@ -137,17 +137,14 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
         flexDirection: "column",
         height: "100%",
         width: "240px",
-        background: "#000",
-        borderRight: "1px solid rgba(255,255,255,0.07)",
+        background: "#0a0a0a",
+        borderRight: "1px solid rgba(255,255,255,0.08)",
         flexShrink: 0,
       }}
     >
-      {/* Wordmark */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "16px 16px 14px" }}>
-        <div style={{ width: "22px", height: "22px", borderRadius: "5px", background: "#C9A84C", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#000", flexShrink: 0 }}>
-          A
-        </div>
-        <span style={{ fontSize: "14px", fontWeight: 500, color: "#fff", lineHeight: 1 }}>Aurum</span>
+      {/* Wordmark — logo.png must be saved to /public/logo.png */}
+      <div style={{ display: "flex", alignItems: "center", padding: "16px 16px 14px" }}>
+        <img src="/logo.png" alt="Aurum Growth" style={{ height: "28px", width: "auto" }} />
       </div>
 
       {/* Nav */}
@@ -167,7 +164,7 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
       </div>
 
       {/* User */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px" }}>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "12px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <UserButton afterSignOutUrl="/" />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -240,15 +237,15 @@ function ClientCard({ c, onSelectClient }: { c: ClientSummary; onSelectClient: (
     <div
       onClick={() => onSelectClient(c.id)}
       style={{
-        background: "#0a0a0a",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "#0c0c0c",
+        border: "1px solid rgba(255,255,255,0.07)",
         borderRadius: "8px",
         padding: "16px",
         cursor: "pointer",
         transition: "border-color 0.15s ease",
       }}
       onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
         <div>
@@ -362,7 +359,7 @@ function ActivityFeed() {
   };
 
   return (
-    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "16px" }}>
+    <div style={{ background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "8px", padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Recent activity</div>
         <div style={{ fontSize: "11px", color: "#444", cursor: "pointer" }}>View all →</div>
@@ -396,7 +393,7 @@ function ActivityFeed() {
 // ── Bookings panel ─────────────────────────────────────────────────────────────
 function BookingsPanel({ bookings }: { bookings: Booking[] }) {
   return (
-    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", padding: "16px" }}>
+    <div style={{ background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "8px", padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Upcoming bookings</div>
         <div style={{ fontSize: "11px", color: "#444", cursor: "pointer" }}>View all →</div>
@@ -435,22 +432,28 @@ function AddClientModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Agency chief-of-staff agent ────────────────────────────────────────────────
+// ── Agency chief-of-staff agent (compact collapsible bar) ─────────────────────
 function AgencyAgent() {
   const WELCOME = "Morning. I'm watching all your campaigns. Add your first client to get started — I'll manage everything from there.";
-  const [chatMessages, setChatMessages] = useState<{ role: "user" | "agent"; content: string }[]>([
+  const [chatMessages,  setChatMessages]  = useState<{ role: "user" | "agent"; content: string }[]>([
     { role: "agent", content: WELCOME },
   ]);
-  const [chatInput,    setChatInput]    = useState("");
-  const [isStreaming,  setIsStreaming]  = useState(false);
+  const [chatInput,     setChatInput]     = useState("");
+  const [isExpanded,    setIsExpanded]    = useState(false);
+  const [isStreaming,   setIsStreaming]   = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Preview: last agent message, truncated
+  const lastAgentContent = [...chatMessages].reverse().find(m => m.role === "agent")?.content ?? WELCOME;
+  const preview = lastAgentContent.length > 80 ? lastAgentContent.slice(0, 80) + "…" : lastAgentContent;
 
   const handleSend = async () => {
     const message = chatInput.trim();
     if (!message || isStreaming) return;
     setChatInput("");
     setIsStreaming(true);
+    setIsExpanded(true);
     setChatMessages(prev => [...prev, { role: "user", content: message }]);
 
     try {
@@ -494,51 +497,58 @@ function AgencyAgent() {
   };
 
   return (
-    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
-      {/* Header */}
-      <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: "12px" }}>
-        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#C9A84C", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, color: "#000", flexShrink: 0 }}>
-          A
-        </div>
-        <div>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "#C9A84C" }}>Aurum</div>
-          <div style={{ fontSize: "11px", color: "#555" }}>Your agency chief of staff</div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "280px", overflowY: "auto" }}>
-        {chatMessages.map((msg, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", background: msg.role === "user" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "12px", color: msg.role === "user" ? "#ccc" : "#888", lineHeight: 1.5 }}>
-              {msg.content}
+    <div style={{ background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "8px", overflow: "hidden" }}>
+      {/* Expanded message history */}
+      {isExpanded && (
+        <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          {chatMessages.map((msg, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{ maxWidth: "84%", padding: "7px 11px", borderRadius: msg.role === "user" ? "10px 10px 2px 10px" : "10px 10px 10px 2px", background: msg.role === "user" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "12px", color: msg.role === "user" ? "#ccc" : "#888", lineHeight: 1.5 }}>
+                {msg.content}
+              </div>
             </div>
-          </div>
-        ))}
-        {streamingText && (
-          <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "12px", color: "#888", lineHeight: 1.5 }}>
-              {streamingText}<span style={{ opacity: 0.4 }}>&#x258A;</span>
+          ))}
+          {streamingText && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={{ maxWidth: "84%", padding: "7px 11px", borderRadius: "10px 10px 10px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "12px", color: "#888", lineHeight: 1.5 }}>
+                {streamingText}<span style={{ opacity: 0.4 }}>&#x258A;</span>
+              </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
 
-      {/* Input */}
-      <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: "8px" }}>
+      {/* Single-row bar — always visible */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "0 16px", height: "60px" }}>
+        {/* Logo — /public/logo.png must be saved to the project */}
+        <img src="/logo.png" alt="Aurum" style={{ height: "20px", width: "auto", flexShrink: 0 }} />
+
+        {/* "Aurum" label */}
+        <span style={{ fontSize: "12px", fontWeight: 600, color: "#C9A84C", flexShrink: 0 }}>Aurum</span>
+
+        {/* Last message preview — click to toggle history */}
+        <div
+          onClick={() => setIsExpanded(e => !e)}
+          style={{ flex: 1, fontSize: "12px", color: "#444", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {preview}
+        </div>
+
+        {/* Inline input */}
         <input
           value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
+          onChange={e => setChatInput(e.target.value)}
+          onFocus={() => setIsExpanded(true)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
           placeholder="Ask anything about your agency..."
           disabled={isStreaming}
-          style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", color: "#ccc", outline: "none", fontFamily: "inherit" }}
+          style={{ width: "220px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "6px", padding: "6px 10px", fontSize: "12px", color: "#ccc", outline: "none", fontFamily: "inherit", flexShrink: 0 }}
         />
         <button
           onClick={() => void handleSend()}
           disabled={isStreaming || !chatInput.trim()}
-          style={{ background: isStreaming || !chatInput.trim() ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "8px 14px", fontSize: "12px", color: isStreaming || !chatInput.trim() ? "#333" : "#aaa", cursor: isStreaming || !chatInput.trim() ? "not-allowed" : "pointer", transition: "all 0.1s" }}
+          style={{ background: isStreaming || !chatInput.trim() ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", color: isStreaming || !chatInput.trim() ? "#333" : "#aaa", cursor: isStreaming || !chatInput.trim() ? "not-allowed" : "pointer", transition: "all 0.1s", flexShrink: 0 }}
         >
           {isStreaming ? "…" : "Send"}
         </button>
@@ -596,9 +606,8 @@ function DashboardView() {
             switch (activePage) {
               case "dashboard":
                 return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
                     <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
-                    <AgencyAgent />
                     <div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
                         <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Clients</div>
@@ -612,6 +621,7 @@ function DashboardView() {
                       <ActivityFeed />
                       <BookingsPanel bookings={bookings} />
                     </div>
+                    <AgencyAgent />
                   </div>
                 );
               case "leads":

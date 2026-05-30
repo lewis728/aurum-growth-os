@@ -4,6 +4,9 @@
  * Agency-level chief-of-staff chat. Has visibility across ALL blueprints
  * for this tenant — leads, appointments, agent actions taken in last 24h.
  * Streams SSE response tokens.
+ *
+ * Never returns a non-streaming error to the client — all failures degrade
+ * gracefully to a streamed fallback message.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,46 +17,86 @@ import OpenAI from "openai";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function streamFallback(message: string): Response {
+  const enc = new TextEncoder();
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: message })}\n\n`));
+      controller.enqueue(enc.encode(`data: [DONE]\n\n`));
+      controller.close();
+    },
+  });
+  return new Response(readable, {
+    headers: {
+      "Content-Type":  "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection":    "keep-alive",
+    },
+  });
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
+  // ── Auth ─────────────────────────────────────────────────────────────────
   const { orgId } = await auth();
   if (!orgId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const tenantId = orgId;
 
+  // ── OpenAI key check — stream fallback instead of JSON error ─────────────
   if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OpenAI not configured" }, { status: 500 });
+    console.error("[agency-chat] OPENAI_API_KEY is not set");
+    return streamFallback("I'm still getting set up. Check back shortly.");
   }
 
-  const body = (await req.json()) as { message?: string };
-  const message = body.message?.trim();
+  // ── Parse body ────────────────────────────────────────────────────────────
+  let message: string;
+  try {
+    const body = (await req.json()) as { message?: string };
+    message = body.message?.trim() ?? "";
+  } catch (err) {
+    console.error("[agency-chat] Failed to parse request body:", err);
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   if (!message) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
 
-  // ── Fetch agency-wide context in parallel ────────────────────────────────
-  const [blueprints, recentActions] = await Promise.all([
-    prisma.campaignBlueprint.findMany({
-      where:   { tenantId },
-      select: {
-        id:             true,
-        businessName:   true,
-        vertical:       true,
-        status:         true,
-        dailyBudgetUsd: true,
-        _count:         { select: { leads: true, appointments: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.agentAction.findMany({
-      where: {
-        tenantId,
-        executedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      },
-      orderBy: { executedAt: "desc" },
-      take:    25,
-    }),
-  ]);
+  // ── Fetch agency-wide context ─────────────────────────────────────────────
+  let blueprints: Awaited<ReturnType<typeof prisma.campaignBlueprint.findMany<{
+    where: { tenantId: string };
+    select: { id: true; businessName: true; vertical: true; status: true; dailyBudgetUsd: true; _count: { select: { leads: true; appointments: true } } };
+  }>>>;
+  let recentActions: Awaited<ReturnType<typeof prisma.agentAction.findMany>>;
+
+  try {
+    [blueprints, recentActions] = await Promise.all([
+      prisma.campaignBlueprint.findMany({
+        where:   { tenantId },
+        select: {
+          id:             true,
+          businessName:   true,
+          vertical:       true,
+          status:         true,
+          dailyBudgetUsd: true,
+          _count:         { select: { leads: true, appointments: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.agentAction.findMany({
+        where: {
+          tenantId,
+          executedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        orderBy: { executedAt: "desc" },
+        take:    25,
+      }),
+    ]);
+  } catch (err) {
+    console.error("[agency-chat] DB fetch failed:", err);
+    return streamFallback("I'm having trouble reading your account data right now. Try again in a moment.");
+  }
 
   // ── Build context strings ────────────────────────────────────────────────
   const totalLeads        = blueprints.reduce((s, b) => s + b._count.leads, 0);
@@ -113,8 +156,10 @@ export async function POST(req: NextRequest): Promise<Response> {
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Stream error";
-        controller.enqueue(enc.encode(`data: ${JSON.stringify({ text: `Error: ${msg}` })}\n\n`));
+        console.error("[agency-chat] OpenAI stream error:", err);
+        controller.enqueue(
+          enc.encode(`data: ${JSON.stringify({ text: "I'm still getting set up. Check back shortly." })}\n\n`)
+        );
       } finally {
         controller.enqueue(enc.encode(`data: [DONE]\n\n`));
         controller.close();
