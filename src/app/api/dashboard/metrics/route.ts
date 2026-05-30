@@ -123,9 +123,9 @@ function getMetaCampaignId(mediaBuying: unknown): string | null {
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const { searchParams } = new URL(req.url);
   const blueprintIdFilter = searchParams.get("blueprintId") ?? undefined;
