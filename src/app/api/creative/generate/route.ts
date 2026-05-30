@@ -15,6 +15,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { generateCreative } from "@/lib/services/higgsFieldService";
+import { buildClientContext } from "@/lib/agents/clientContext";
 import type { CreativeAsset } from "@/types/creativeLayer";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +62,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const styleKey   = body.style && STYLE_PROMPTS[body.style] ? body.style : "direct_offer";
   const brief      = body.brief?.trim() || `${blueprint.businessName} — ${blueprint.offerHook ?? blueprint.vertical}`;
-  const prompt     = `${brief}. Style: ${STYLE_PROMPTS[styleKey]}. Vertical: ${blueprint.vertical}. 9:16 social video ad.`;
+
+  // Client Context Engine: make the creative client-specific — brand tone, USPs,
+  // ideal customer, and (critically) compliance constraints shape every ad.
+  const ctxBrief = (await buildClientContext(blueprint.id)).brief;
+  const creativeGuidance = [
+    ctxBrief?.brandTone ? `Brand tone: ${ctxBrief.brandTone}.` : null,
+    ctxBrief?.keyUSPs ? `Lead with these USPs: ${ctxBrief.keyUSPs}.` : null,
+    ctxBrief?.idealCustomerProfile ? `Speak to: ${ctxBrief.idealCustomerProfile}.` : null,
+    ctxBrief?.complianceNotes ? `COMPLIANCE — must NOT claim or imply: ${ctxBrief.complianceNotes}.` : null,
+  ].filter((s): s is string => s !== null).join(" ");
+
+  const prompt     = `${brief}. Style: ${STYLE_PROMPTS[styleKey]}. Vertical: ${blueprint.vertical}. ` +
+    `${creativeGuidance ? creativeGuidance + " " : ""}9:16 social video ad.`;
 
   let asset: CreativeAsset;
   try {

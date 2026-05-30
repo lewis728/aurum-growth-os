@@ -17,7 +17,6 @@ interface BriefData {
   keyUSPs:                string;
   competitorNames:        string;
   complianceNotes:        string;
-  businessHours:          string;
   websiteSummary:         string;
   reportingPreferences:   string;
   averageClientValue:     string;
@@ -28,7 +27,7 @@ interface BriefData {
 
 const EMPTY: BriefData = {
   idealCustomerProfile: "", badLeadSignals: "", qualificationQuestions: "", brandTone: "",
-  keyUSPs: "", competitorNames: "", complianceNotes: "", businessHours: "", websiteSummary: "",
+  keyUSPs: "", competitorNames: "", complianceNotes: "", websiteSummary: "",
   reportingPreferences: "", averageClientValue: "", targetCplGbp: "", budgetHardLimit: "", approvalThreshold: "",
 };
 
@@ -97,7 +96,6 @@ export function ClientBriefPanel({ blueprintId, agentName }: { blueprintId: stri
             keyUSPs:                str(b.keyUSPs),
             competitorNames:        str(b.competitorNames),
             complianceNotes:        str(b.complianceNotes),
-            businessHours:          str(b.businessHours),
             websiteSummary:         str(b.websiteSummary),
             reportingPreferences:   str(b.reportingPreferences),
             averageClientValue:     str(b.averageClientValue),
@@ -166,7 +164,6 @@ export function ClientBriefPanel({ blueprintId, agentName }: { blueprintId: stri
 
           <SectionTitle>The sale</SectionTitle>
           <TextField label="Qualification questions" value={form.qualificationQuestions} onChange={set("qualificationQuestions")} ph="What Sophie should ask to qualify a lead" />
-          <TextField label="Business hours (only call within these)" value={form.businessHours} onChange={set("businessHours")} ph="e.g. Mon–Fri 9am–7pm" rows={1} />
 
           <SectionTitle>The numbers</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>

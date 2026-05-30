@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 const STRING_FIELDS = [
   "idealCustomerProfile", "badLeadSignals", "qualificationQuestions", "brandTone",
   "keyUSPs", "competitorNames", "reportingPreferences", "complianceNotes",
-  "businessHours", "websiteSummary", "clientContactName", "clientContactEmail", "clientWhatsApp",
+  "websiteSummary", "clientContactName", "clientContactEmail", "clientWhatsApp",
 ] as const;
 
 // Numeric fields accepted on PUT.

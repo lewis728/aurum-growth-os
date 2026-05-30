@@ -92,7 +92,12 @@ export async function generateMorningBriefing(
       ? `\n- Seasonal note: ${seasonal.monthName} is historically strong for ${blueprint.vertical} (CPL ~${seasonal.efficiencyPct}% below average) — a good month to launch a new campaign.`
       : "";
 
+    // Client Context Engine — frame the briefing against what the agent knows
+    // about this client (ideal lead, target CPL, USPs), not generic metrics.
+    const clientCtx = await buildClientContext(blueprintId);
+
     const context =
+      `${clientCtx.promptBlock}\n\n` +
       `Overnight data (last 24 hours):\n` +
       `- New leads generated: ${leadCount}\n` +
       `- Appointments booked: ${appointmentCount}\n` +

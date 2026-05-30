@@ -94,7 +94,6 @@ export function renderBriefBlock(brief: ClientBrief | null): string {
     brief.targetCplGbp != null ? `Target CPL: £${brief.targetCplGbp}` : null,
     brief.budgetHardLimit != null ? `Budget hard limit: £${brief.budgetHardLimit}/day — never exceed without approval` : null,
     brief.approvalThreshold != null ? `Approval threshold: £${brief.approvalThreshold} — changes above this need agency owner approval` : null,
-    line("Business hours (only call within these)", brief.businessHours),
     line("Qualification questions", brief.qualificationQuestions),
     objections ? `Objection responses:\n${objections}` : null,
     line("COMPLIANCE — never claim/say", brief.complianceNotes),

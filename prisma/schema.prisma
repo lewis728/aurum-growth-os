@@ -84,7 +84,6 @@ model ClientBrief {
   approvalThreshold      Float?
   targetCplGbp           Float?    // the CPL/CPA the agent optimises toward
   complianceNotes        String?   // claims/words the agent must NEVER make — governs ads + calls
-  businessHours          String?   // when Sophie may call (e.g. "Mon-Fri 9am-7pm")
   websiteSummary         String?   // GPT-distilled summary of the scraped website
   reportingPreferences   String?
   clientContactName      String?
