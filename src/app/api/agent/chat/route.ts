@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getCampaignInsights,
 } from "@/lib/services/metaAdsService";
+import { buildClientBriefInjection, clientAgentPersona } from "@/lib/agents/clientAgent";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   // ── 3. Fetch data in parallel ─────────────────────────────────────────────
-  const [blueprint, recentActions, activeInstructions, repRow] = await Promise.all([
-    prisma.campaignBlueprint.findUnique({
+  const [blueprint, recentActions, activeInstructions, repRow, clientBrief] = await Promise.all([
+    prisma.campaignBlueprint.findFirst({
       where: { id: blueprintId, tenantId },
       select: {
         id:             true,
@@ -77,6 +78,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     prisma.aIRepresentative.findUnique({
       where:  { blueprintId },
       select: { repName: true },
+    }),
+    prisma.clientBrief.findUnique({
+      where: { blueprintId },
     }),
   ]);
 
@@ -176,9 +180,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     ? activeInstructions.map(i => `- ${i.instruction}`).join("\n")
     : "None set.";
 
-  const systemPrompt = `You are ${agentName}, an AI media buyer managing ${blueprint.businessName}'s advertising campaigns. You have access to the latest campaign data. You speak in first person, are direct and confident, and always back up your statements with numbers. You are not a chatbot — you are a member of staff reporting to the agency owner.
+  // Client Account-Manager persona + this client's brief (Build 1).
+  const briefInjection = buildClientBriefInjection(clientBrief);
+  const briefBlock = briefInjection ? `${briefInjection}\n\n` : "";
 
-${instructionNote}Recent actions you have taken:
+  const systemPrompt = `${clientAgentPersona(agentName, blueprint.businessName)} You speak in first person, are direct and confident, and always back up your statements with numbers. You are not a chatbot — you are a member of staff reporting to the agency owner.
+
+${briefBlock}${instructionNote}Recent actions you have taken:
 ${actionsText}
 
 Standing instructions from the agency owner:

@@ -57,10 +57,39 @@ model CampaignBlueprint {
   appointments     Appointment[]
   agentActions     AgentAction[]
   agentInstructions AgentInstruction[]
+  clientBrief      ClientBrief?
 
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([pendingOrgLink])
+}
+
+// ── ClientBrief ──────────────────────────────────────────────────────
+// One per client (blueprint). The dedicated account-manager agent reads this
+// at the start of every reasoning cycle so it manages the client to brief —
+// ideal/bad leads, brand voice, USPs, and the budget/approval guardrails.
+model ClientBrief {
+  id                     String   @id @default(cuid())
+  blueprintId            String   @unique
+  tenantId               String
+  idealCustomerProfile   String?
+  badLeadSignals         String?
+  qualificationQuestions String?
+  objectionResponses     Json?
+  brandTone              String?
+  keyUSPs                String?
+  competitorNames        String?
+  averageClientValue     Float?
+  budgetHardLimit        Float?
+  approvalThreshold      Float?
+  reportingPreferences   String?
+  clientContactName      String?
+  clientContactEmail     String?
+  clientWhatsApp         String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  blueprint              CampaignBlueprint @relation(fields: [blueprintId], references: [id])
+  @@index([tenantId])
 }
 
 // ── AgencyProfile ────────────────────────────────────────────────────
@@ -74,6 +103,11 @@ model AgencyProfile {
   currentClientCount String
   currentFulfilment  String
   primaryGoal        String
+  // Chief-of-staff (portfolio agent) context + alerting
+  slackWebhookUrl          String?
+  agencyAverageClientValue Float?
+  targetClientsPerMonth    Int?
+  chiefOfStaffBrief        String?
   onboardedAt        DateTime @default(now())
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -328,20 +362,21 @@ model MonthlyReport {
 // ── AgentAction ──────────────────────────────────────────────────────────────
 // Append-only log of every autonomous decision the agent makes per blueprint.
 model AgentAction {
-  id           String            @id @default(cuid())
+  id           String             @id @default(cuid())
   tenantId     String
-  blueprintId  String
+  blueprintId  String?            // null = portfolio-level (chief-of-staff) action, tenant-scoped only
   agentName    String
   actionType   String
-  reasoning    String            @db.Text
+  reasoning    String             @db.Text
   outcome      String
   metricBefore Float?
   metricAfter  Float?
-  executedAt   DateTime          @default(now())
-  blueprint    CampaignBlueprint @relation(fields: [blueprintId], references: [id])
+  executedAt   DateTime           @default(now())
+  blueprint    CampaignBlueprint? @relation(fields: [blueprintId], references: [id])
 
   @@index([tenantId, blueprintId])
   @@index([executedAt])
+  @@index([tenantId, executedAt])
 }
 
 // ── AgentInstruction ──────────────────────────────────────────────────────────

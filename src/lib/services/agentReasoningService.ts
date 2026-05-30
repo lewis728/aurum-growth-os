@@ -107,11 +107,21 @@ async function parseInstructionsWithGPT(
   }
 }
 
+// ── Client-brief guardrails (Build 1: Dual Agent Architecture) ─────────────────
+// Injected by the Client Account-Manager agent (clientAgent.ts) so the reasoning
+// loop manages each client to its brief and respects budget/approval limits.
+export interface ClientBriefGuardrails {
+  budgetHardLimitGbp?:   number | null;  // never scale daily budget above this
+  approvalThresholdGbp?: number | null;  // a budget change above this needs owner approval
+  briefText?:            string | null;  // brief context fed into instruction parsing
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function runAgentReasoningCycle(
   blueprintId: string,
-  tenantId: string
+  tenantId: string,
+  brief?: ClientBriefGuardrails
 ): Promise<void> {
   // ── 1. Fetch blueprint ────────────────────────────────────────────────────
   const blueprint = await prisma.campaignBlueprint.findUnique({
@@ -220,11 +230,17 @@ export async function runAgentReasoningCycle(
     `benchmark=£${benchmarkCpl.toFixed(2)}, CTR=${(ctr * 100).toFixed(2)}%, impressions=${impressions}`
   );
 
-  // ── 9. Parse owner instructions via GPT ──────────────────────────────────
+  // ── 9. Parse owner instructions via GPT (with client-brief context) ───────
+  // The client brief is injected ahead of standing instructions so the agent
+  // reasons within the brief (ideal/bad leads, USPs, brand tone, limits).
+  const briefText = brief?.briefText?.trim() ?? "";
+  const combinedInstructions = [briefText, ...instructions.map(i => i.instruction)]
+    .filter(s => s.trim().length > 0)
+    .join("\n");
+
   let overrides: InstructionOverrides = { ...defaultOverrides };
-  if (instructions.length > 0) {
-    const instructionsText = instructions.map(i => i.instruction).join("\n");
-    overrides = await parseInstructionsWithGPT(instructionsText, {
+  if (combinedInstructions.length > 0) {
+    overrides = await parseInstructionsWithGPT(combinedInstructions, {
       currentCpl, benchmarkCpl, leads, spend, impressions,
     });
   }
@@ -270,21 +286,47 @@ export async function runAgentReasoningCycle(
     return;
   }
 
-  // DECISION B — Strong performance: use minLeadsToScale override if set, else 5
+  // DECISION B — Strong performance: scale budget, respecting client-brief limits
   const scaleLeadsThreshold = overrides.minLeadsToScale ?? 5;
   if (currentCpl < benchmarkCpl * 0.75 && leads >= scaleLeadsThreshold) {
-    const currentBudgetCents = blueprint.dailyBudgetUsd * 100;
-    const newBudgetCents     = Math.min(currentBudgetCents * 1.2, 20000); // cap at £200/day
-    const newBudgetGbp       = (newBudgetCents / 100).toFixed(2);
+    const currentBudget = blueprint.dailyBudgetUsd; // daily budget (native unit, treated as £)
+    const hardLimit     = brief?.budgetHardLimitGbp ?? 200; // default £200/day ceiling
 
+    // Never scale above the brief's hard budget limit.
+    if (currentBudget >= hardLimit) {
+      await logAction({
+        actionType:   "NO_ACTION",
+        reasoning:    `CPL of £${currentCpl.toFixed(2)} is strong, but the daily budget (£${currentBudget.toFixed(2)}) is already at the hard limit of £${hardLimit.toFixed(2)}/day. Holding — scaling further needs your approval.`,
+        outcome:      "At budget ceiling",
+        metricBefore: currentCpl,
+      });
+      return;
+    }
+
+    const proposedBudget    = Math.min(currentBudget * 1.2, hardLimit);
+    const increase          = proposedBudget - currentBudget;
+    const approvalThreshold = brief?.approvalThresholdGbp ?? null;
+
+    // A change above the approval threshold is flagged, not executed.
+    if (approvalThreshold !== null && increase > approvalThreshold) {
+      await logAction({
+        actionType:   "NEEDS_APPROVAL",
+        reasoning:    `CPL of £${currentCpl.toFixed(2)} justifies scaling the daily budget from £${currentBudget.toFixed(2)} to £${proposedBudget.toFixed(2)} (+£${increase.toFixed(2)}/day), which exceeds your £${approvalThreshold.toFixed(2)} approval threshold. Awaiting your go-ahead.`,
+        outcome:      "Flagged for approval",
+        metricBefore: currentCpl,
+      });
+      return;
+    }
+
+    const newBudgetCents = Math.round(proposedBudget * 100);
     if (metaAdSetId) {
       await updateCampaignBudget(metaAdSetId, newBudgetCents, tenantId);
     }
 
     await logAction({
       actionType:   "SCALE_BUDGET",
-      reasoning:    `CPL of £${currentCpl.toFixed(2)} is 25% below the £${benchmarkCpl.toFixed(2)} benchmark with ${leads} leads. Scaling budget 20%.`,
-      outcome:      `Daily budget increased to £${newBudgetGbp}`,
+      reasoning:    `CPL of £${currentCpl.toFixed(2)} is 25% below the £${benchmarkCpl.toFixed(2)} benchmark with ${leads} leads. Scaling budget to £${proposedBudget.toFixed(2)}/day.`,
+      outcome:      `Daily budget increased to £${proposedBudget.toFixed(2)}`,
       metricBefore: currentCpl,
       metricAfter:  currentCpl,
     });

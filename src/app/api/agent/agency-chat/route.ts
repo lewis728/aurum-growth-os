@@ -111,25 +111,38 @@ export async function POST(req: NextRequest): Promise<Response> {
         )
         .join("\n");
 
+  // Client-name lookup for action attribution (blueprintId may be null = portfolio).
+  const clientNameById = new Map(blueprints.map(b => [b.id, b.businessName]));
+  const actionLabel = (blueprintId: string | null): string =>
+    blueprintId ? (clientNameById.get(blueprintId) ?? "a client") : "portfolio";
+
   const actionsSummary = recentActions.length === 0
     ? "No autonomous actions in the last 24 hours."
     : recentActions
-        .map(a => `  • [${a.actionType}] ${a.blueprintId.slice(0, 8)}: ${a.reasoning.slice(0, 120)}`)
+        .map(a => `  • [${a.actionType}] ${actionLabel(a.blueprintId)}: ${a.reasoning.slice(0, 120)}`)
+        .join("\n");
+
+  // Last 5 portfolio-level (chief-of-staff) actions — your own prior briefings/alerts.
+  const portfolioActions = recentActions.filter(a => a.blueprintId === null).slice(0, 5);
+  const portfolioSummary = portfolioActions.length === 0
+    ? "No portfolio-level briefings yet."
+    : portfolioActions
+        .map(a => `  • [${a.actionType}] ${a.reasoning.slice(0, 160)}`)
         .join("\n");
 
   const systemPrompt =
-    `You are the agency chief of staff for an Aurum Growth OS account. ` +
-    `You have visibility across ALL of the agency owner's clients. ` +
-    `You speak in first person, are direct and confident, and give clear actionable insights. ` +
-    `You know about every campaign, every lead, every booking. ` +
-    `Report like a senior account director giving a morning briefing to the agency owner. ` +
+    `You are the Chief of Staff for this agency. You have visibility across ALL clients ` +
+    `and you think like a COO: you spot patterns, flag risks, identify opportunities, and brief ` +
+    `the agency owner on what matters most today. You speak in first person, are direct and ` +
+    `confident, and give clear actionable insights. ` +
     `Keep answers concise — two to four sentences unless asked for detail.\n\n` +
     `Current agency snapshot:\n` +
     `  Total clients: ${blueprints.length}\n` +
     `  Total leads across all clients: ${totalLeads}\n` +
     `  Total appointments across all clients: ${totalAppointments}\n\n` +
     `Client breakdown:\n${clientsSummary}\n\n` +
-    `Agent actions taken in last 24h:\n${actionsSummary}`;
+    `Agent actions taken in last 24h:\n${actionsSummary}\n\n` +
+    `Your recent portfolio-level briefings:\n${portfolioSummary}`;
 
   // ── Stream GPT-4o response ───────────────────────────────────────────────
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

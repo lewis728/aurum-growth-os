@@ -398,12 +398,9 @@ export async function generateReportsForAllTenants(
       let ownerEmail = "";
       for (const membership of memberships.data) {
         if (membership.role === "org:admin") {
-          const userId = membership.publicUserData?.userId;
-          if (userId) {
-            const user = await clerkClient.users.getUser(userId);
-            ownerEmail = user.emailAddresses[0]?.emailAddress ?? "";
-            break;
-          }
+          // publicUserData.identifier is the member's primary email in Clerk v5.
+          ownerEmail = membership.publicUserData?.identifier ?? "";
+          if (ownerEmail) break;
         }
       }
 
