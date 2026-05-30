@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SignedIn, SignedOut, RedirectToSignIn, UserButton } from "@clerk/nextjs";
 import ChatWorkspace from "@/components/dashboard/ChatWorkspace";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
@@ -214,6 +214,84 @@ function KpiStrip({ data, isLoading }: { data: Record<string, unknown> | null | 
   );
 }
 
+// ── Client card (individual — fetches its own agent name + recent-action status) ─
+interface RepSummary    { repName: string; }
+interface ActionSummary { executedAt: string; }
+
+function ClientCard({ c, onSelectClient }: { c: ClientSummary; onSelectClient: (id: string) => void }) {
+  const [agentName,       setAgentName]       = useState<string | null>(null);
+  const [hasRecentAction, setHasRecentAction] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([
+      fetch(`/api/representative?blueprintId=${encodeURIComponent(c.id)}`)
+        .then(r => r.ok ? r.json() as Promise<RepSummary | null> : Promise.resolve(null))
+        .then(d => { if (d?.repName) setAgentName(d.repName); }),
+      fetch(`/api/agent/actions?blueprintId=${encodeURIComponent(c.id)}`)
+        .then(r => r.ok ? r.json() as Promise<{ actions: ActionSummary[] }> : Promise.resolve({ actions: [] }))
+        .then(d => {
+          const cutoff = Date.now() - 4 * 60 * 60 * 1000;
+          setHasRecentAction((d.actions ?? []).some(a => new Date(a.executedAt).getTime() > cutoff));
+        }),
+    ]);
+  }, [c.id]);
+
+  return (
+    <div
+      onClick={() => onSelectClient(c.id)}
+      style={{
+        background: "#0a0a0a",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: "8px",
+        padding: "16px",
+        cursor: "pointer",
+        transition: "border-color 0.15s ease",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", lineHeight: 1.3 }}>{c.businessName}</div>
+          <div style={{ fontSize: "11px", color: "#555", marginTop: "3px" }}>{c.vertical}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {hasRecentAction && (
+            <span
+              className="animate-pulse"
+              style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#C9A84C", display: "inline-block", flexShrink: 0 }}
+            />
+          )}
+          <StatusDot status={c.status} />
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+        {[
+          { label: "Spend/day", value: fmtCurrency(c.spendToday) },
+          { label: "Leads/wk",  value: String(c.leadsThisWeek) },
+          { label: "CPL",       value: c.cpl != null ? fmtCurrency(c.cpl) : "—" },
+        ].map(m => (
+          <div key={m.label}>
+            <div style={{ fontSize: "11px", color: "#444", marginBottom: "2px" }}>{m.label}</div>
+            <div className="font-mono" style={{ fontSize: "12px", color: "#ccc" }}>{m.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontSize: "11px", color: "#444" }}>Last lead</span>
+          <span className="font-mono" style={{ fontSize: "11px", color: "#555" }}>{timeAgo(c.lastLeadAt)}</span>
+        </div>
+        {agentName && (
+          <div style={{ fontSize: "11px", color: "#555", marginTop: "6px" }}>
+            Talk to {agentName} →
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Client cards ───────────────────────────────────────────────────────────────
 function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void; onSelectClient: (id: string) => void }) {
   const [clients, setClients] = useState<ClientSummary[]>([]);
@@ -239,44 +317,7 @@ function ClientCards({ onAddClient, onSelectClient }: { onAddClient: () => void;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
       {clients.map(c => (
-        <div
-          key={c.id}
-          onClick={() => onSelectClient(c.id)}
-          style={{
-            background: "#0a0a0a",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "8px",
-            padding: "16px",
-            cursor: "pointer",
-            transition: "border-color 0.15s ease",
-          }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", lineHeight: 1.3 }}>{c.businessName}</div>
-              <div style={{ fontSize: "11px", color: "#555", marginTop: "3px" }}>{c.vertical}</div>
-            </div>
-            <StatusDot status={c.status} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-            {[
-              { label: "Spend/day", value: fmtCurrency(c.spendToday) },
-              { label: "Leads/wk",  value: String(c.leadsThisWeek) },
-              { label: "CPL",       value: c.cpl != null ? fmtCurrency(c.cpl) : "—" },
-            ].map(m => (
-              <div key={m.label}>
-                <div style={{ fontSize: "11px", color: "#444", marginBottom: "2px" }}>{m.label}</div>
-                <div className="font-mono" style={{ fontSize: "12px", color: "#ccc" }}>{m.value}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <span style={{ fontSize: "11px", color: "#444" }}>Last lead</span>
-            <span className="font-mono" style={{ fontSize: "11px", color: "#555" }}>{timeAgo(c.lastLeadAt)}</span>
-          </div>
-        </div>
+        <ClientCard key={c.id} c={c} onSelectClient={onSelectClient} />
       ))}
 
       {/* Add client card */}
@@ -394,6 +435,118 @@ function AddClientModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Agency chief-of-staff agent ────────────────────────────────────────────────
+function AgencyAgent() {
+  const WELCOME = "Morning. I'm watching all your campaigns. Add your first client to get started — I'll manage everything from there.";
+  const [chatMessages, setChatMessages] = useState<{ role: "user" | "agent"; content: string }[]>([
+    { role: "agent", content: WELCOME },
+  ]);
+  const [chatInput,    setChatInput]    = useState("");
+  const [isStreaming,  setIsStreaming]  = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSend = async () => {
+    const message = chatInput.trim();
+    if (!message || isStreaming) return;
+    setChatInput("");
+    setIsStreaming(true);
+    setChatMessages(prev => [...prev, { role: "user", content: message }]);
+
+    try {
+      const response = await fetch("/api/agent/agency-chat", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ message }),
+      });
+
+      if (!response.ok || !response.body) {
+        setChatMessages(prev => [...prev, { role: "agent", content: "Something went wrong. Please try again." }]);
+        return;
+      }
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let agentText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(raw) as { text?: string };
+            if (parsed.text) { agentText += parsed.text; setStreamingText(agentText); }
+          } catch { /* ignore malformed SSE lines */ }
+        }
+      }
+
+      setChatMessages(prev => [...prev, { role: "agent", content: agentText || "Done." }]);
+      setStreamingText("");
+    } catch {
+      setChatMessages(prev => [...prev, { role: "agent", content: "Connection error. Please try again." }]);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  return (
+    <div style={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#C9A84C", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, color: "#000", flexShrink: 0 }}>
+          A
+        </div>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "#C9A84C" }}>Aurum</div>
+          <div style={{ fontSize: "11px", color: "#555" }}>Your agency chief of staff</div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "280px", overflowY: "auto" }}>
+        {chatMessages.map((msg, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+            <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", background: msg.role === "user" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", fontSize: "12px", color: msg.role === "user" ? "#ccc" : "#888", lineHeight: 1.5 }}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+        {streamingText && (
+          <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div style={{ maxWidth: "82%", padding: "8px 12px", borderRadius: "12px 12px 12px 2px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "12px", color: "#888", lineHeight: 1.5 }}>
+              {streamingText}<span style={{ opacity: 0.4 }}>&#x258A;</span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: "8px" }}>
+        <input
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
+          placeholder="Ask anything about your agency..."
+          disabled={isStreaming}
+          style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", color: "#ccc", outline: "none", fontFamily: "inherit" }}
+        />
+        <button
+          onClick={() => void handleSend()}
+          disabled={isStreaming || !chatInput.trim()}
+          style={{ background: isStreaming || !chatInput.trim() ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "8px 14px", fontSize: "12px", color: isStreaming || !chatInput.trim() ? "#333" : "#aaa", cursor: isStreaming || !chatInput.trim() ? "not-allowed" : "pointer", transition: "all 0.1s" }}
+        >
+          {isStreaming ? "…" : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main dashboard view ────────────────────────────────────────────────────────
 function DashboardView() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -445,6 +598,7 @@ function DashboardView() {
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     <KpiStrip data={data as unknown as Record<string, unknown>} isLoading={isLoading} />
+                    <AgencyAgent />
                     <div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
                         <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff" }}>Clients</div>
