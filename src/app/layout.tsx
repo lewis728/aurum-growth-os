@@ -4,7 +4,7 @@
 // When branding is active, zero trace of "Aurum" appears in metadata or rendered HTML.
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { auth } from "@clerk/nextjs/server";
 import { getBranding } from "@/lib/services/brandingService";
 import "./globals.css";
@@ -14,6 +14,13 @@ export const dynamic = "force-dynamic";
 const inter = Inter({
   subsets:  ["latin"],
   variable: "--font-inter",
+  display:  "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets:  ["latin"],
+  weight:   ["400", "500"],
+  variable: "--font-mono",
   display:  "swap",
 });
 
@@ -69,7 +76,7 @@ export default async function RootLayout({
     <ClerkProvider>
       <html
         lang="en"
-        className={inter.variable}
+        className={`${inter.variable} ${jetbrainsMono.variable}`}
         style={{ ["--brand-primary" as string]: `#${primaryColour}`, ["--brand-accent" as string]: `#${accentColour}` }}
       >
         <head>
@@ -78,7 +85,7 @@ export default async function RootLayout({
           <style>{`:root { ${brandStyle} }`}</style>
         </head>
         <body
-          className="font-sans bg-white text-gray-900 antialiased"
+          className="antialiased"
           data-logo-url={logoUrl ?? ""}
           data-agency-name={hasBranding ? agencyName : ""}
         >
