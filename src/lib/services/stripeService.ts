@@ -18,6 +18,7 @@
 
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { CampaignStatus } from "@/enums/campaignEnums";
 import type { AgencySubscription } from "@prisma/client";
 import { getCampaignInsights } from "@/lib/services/metaAdsService";
 
@@ -350,7 +351,7 @@ export async function calculateAndCreateSpendFee(
   }
 
   const blueprints = await prisma.campaignBlueprint.findMany({
-    where: { tenantId, status: "LIVE" },
+    where: { tenantId, status: CampaignStatus.LIVE },
     select: { id: true, crm: true },
   });
 

@@ -56,9 +56,9 @@ function buildCalendlyStateToken(tenantId: string): string {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── 1. Authenticate ───────────────────────────────────────────────────────
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   // ── 2. Build redirect URI ─────────────────────────────────────────────────
   const origin = req.nextUrl.origin;

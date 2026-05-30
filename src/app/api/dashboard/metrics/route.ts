@@ -12,6 +12,7 @@ import { Prisma }       from "@prisma/client";
 import { prisma }      from "@/lib/prisma";
 import type { CallAnalysis }     from "@/types/voiceLayer";
 import type { MediaBuyingLayer } from "@/types/mediaBuyingLayer";
+import { CampaignStatus } from "@/enums/campaignEnums";
 import { auth } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
@@ -235,7 +236,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ]);
 
   // Hero Metrics
-  const liveBlueprints = blueprints.filter((b) => b.status === "LIVE");
+  const liveBlueprints = blueprints.filter((b) => b.status === CampaignStatus.LIVE);
   const spendTodayUsd  = liveBlueprints.reduce((s, b) => s + b.dailyBudgetUsd, 0);
   const spendTodayGbp  = usdToGbp(spendTodayUsd);
   const leadsThisWeekCount = leadsThisWeek.length;
@@ -264,7 +265,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const campaignHealth: CampaignHealthRow[] = blueprints.map((b) => {
     const bpLeads   = leadsPerBlueprint.get(b.id) ?? 0;
     const bpDailyGbp = usdToGbp(b.dailyBudgetUsd);
-    const bpSpend   = b.status === "LIVE" ? bpDailyGbp : 0;
+    const bpSpend   = b.status === CampaignStatus.LIVE ? bpDailyGbp : 0;
     const bpCpl     = bpLeads > 0
       ? Math.round((bpSpend * 7) / bpLeads * 100) / 100
       : 0;

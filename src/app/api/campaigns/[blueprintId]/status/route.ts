@@ -24,9 +24,9 @@ export async function PATCH(
   { params }: { params: { blueprintId: string } }
 ): Promise<NextResponse> {
   // ── Auth ────────────────────────────────────────────────────────────────────
-  const { orgId: _orgId } = await auth();
-  if (!_orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = _orgId;
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   // ── Validate body ───────────────────────────────────────────────────────────
   let body: z.infer<typeof BodySchema>;

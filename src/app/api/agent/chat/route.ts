@@ -32,11 +32,11 @@ function formatDate(d: Date): string {
 
 export async function POST(req: NextRequest): Promise<Response> {
   // ── 1. Auth check ─────────────────────────────────────────────────────────
-  const { orgId } = await auth();
-  if (!orgId) {
+  const { userId, orgId } = await auth();
+  if (!userId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   if (!process.env.OPENAI_API_KEY) {
     return new Response(JSON.stringify({ error: "OpenAI not configured" }), { status: 500 });

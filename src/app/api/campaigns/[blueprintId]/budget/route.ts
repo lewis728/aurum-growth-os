@@ -72,9 +72,9 @@ export async function PATCH(
   { params }: { params: { blueprintId: string } }
 ): Promise<NextResponse> {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
-  const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const { blueprintId } = params;
 

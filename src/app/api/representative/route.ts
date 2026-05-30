@@ -83,9 +83,9 @@ function buildBlueprintFromRow(row: {
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const blueprintId = req.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {
@@ -111,9 +111,9 @@ const { orgId } = await auth();
 // ── PATCH ─────────────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   // Subscription guard
   const hasMandate = await validateStripeMandate(tenantId);

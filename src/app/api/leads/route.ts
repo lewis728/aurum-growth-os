@@ -13,9 +13,9 @@ import { auth } from "@clerk/nextjs/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const { orgId: _orgId } = await auth();
-  if (!_orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const tenantId = _orgId;
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const blueprintId = request.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {

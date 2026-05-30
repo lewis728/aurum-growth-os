@@ -18,9 +18,9 @@ export const dynamic = "force-dynamic";
 // Currently blueprints are created via /api/onboarding/chat.
 // Guard is here so any future POST is protected from the start.
 export async function POST(req: NextRequest): Promise<NextResponse> { // eslint-disable-line @typescript-eslint/no-unused-vars
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   const access = await canLaunchCampaign(tenantId);
   if (!access.allowed) {
@@ -33,9 +33,9 @@ const { orgId } = await auth();
 
 // ─── GET /api/campaigns ───────────────────────────────────────────────────────
 export async function GET(req: NextRequest): Promise<NextResponse> {
-const { orgId } = await auth();
-  if (!orgId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId;
+const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const tenantId = orgId ?? `pending:${userId}`;
 
   try {
     const blueprints = await prisma.campaignBlueprint.findMany({

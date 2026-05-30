@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
+import { CampaignStatus } from "@/enums/campaignEnums";
 import OpenAI from "openai";
 
 export const dynamic = "force-dynamic";
@@ -127,10 +128,10 @@ async function extractClientProfile(
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { userId, orgId } = await auth();
-  if (!userId || !orgId) {
+  if (!userId) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const tenantId = orgId;
+  const tenantId = orgId ?? `pending:${userId}`;
 
   let body: z.infer<typeof RequestBodySchema>;
   try {
@@ -164,8 +165,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           const blueprint = await prisma.campaignBlueprint.create({
             data: {
               tenantId,
-              status: "DRAFT",
-              vertical: "GENERAL",
+              status: CampaignStatus.PENDING,
+              vertical: "other",
               businessName: profile.businessName,
               targetLocation: "UK",
               dailyBudgetUsd: 50,
