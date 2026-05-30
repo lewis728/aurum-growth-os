@@ -43,6 +43,12 @@ interface Representative {
   personality: string;
 }
 
+interface Briefing {
+  briefingText: string | null;
+  briefingAt:   string | null;
+  agentName:    string;
+}
+
 interface ClientSubAccountProps {
   clientId: string;
   onBack: () => void;
@@ -121,6 +127,7 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
   const [rep,    setRep]    = useState<Representative | null>(null);
   const [loading, setLoading] = useState(true);
   const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
+  const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -142,6 +149,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
       fetch(`/api/agent/actions?blueprintId=${encodeURIComponent(clientId)}`)
         .then((r) => r.ok ? r.json() as Promise<{ actions: AgentAction[] }> : Promise.resolve({ actions: [] }))
         .then((d) => setAgentActions(d.actions ?? [])),
+      fetch(`/api/agent/briefing?blueprintId=${encodeURIComponent(clientId)}`)
+        .then((r) => r.ok ? r.json() as Promise<Briefing> : Promise.resolve(null))
+        .then((d) => setBriefing(d)),
     ]).finally(() => setLoading(false));
   }, [clientId]);
 
@@ -216,8 +226,11 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
   }
 
   const agentName = rep?.repName ?? "Not configured";
+  const briefingAgentName = briefing?.agentName ?? agentName;
   const leadsThisWeek = leads.filter((l) => new Date(l.createdAt) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length;
-  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("en-GB", { weekday: "long" });
+  const briefingTimestamp = briefing?.briefingAt
+    ? new Date(briefing.briefingAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null;
 
   const kpis = [
     { label: "Spend today",      value: "£0",                  sub: "Live campaigns" },
@@ -289,19 +302,37 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
       {/* Morning briefing */}
       <div
         className="rounded-xl p-4"
-        style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
+        style={{ background: "var(--surface-1)", border: "1px solid var(--border)", borderLeft: "2px solid var(--gold)" }}
       >
-        <div className="text-[10px] uppercase tracking-widest mb-3" style={{ color: "var(--text-3)" }}>
-          Morning briefing
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+            style={{ background: "var(--gold)", color: "#000" }}
+          >
+            {initials(briefingAgentName)}
+          </div>
+          <div>
+            <div className="text-xs font-medium" style={{ color: "var(--text-1)" }}>{briefingAgentName}</div>
+            <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-3)" }}>Morning briefing</div>
+          </div>
         </div>
-        <div className="font-mono text-xs mb-2.5" style={{ color: "var(--text-2)" }}>
-          {yesterday} · {agentName} · {client.businessName}
-        </div>
-        <div className="font-mono text-xs space-y-1" style={{ color: "var(--text-3)" }}>
-          <div>• Called 0 leads · 0 booked</div>
-          <div>• No ad changes made</div>
-          <div>• Campaign running within target CPL</div>
-        </div>
+
+        {briefing?.briefingText ? (
+          <>
+            <div className="text-sm leading-relaxed" style={{ color: "var(--text-1)" }}>
+              {briefing.briefingText}
+            </div>
+            {briefingTimestamp && (
+              <div className="text-[10px] mt-3 font-mono" style={{ color: "var(--text-3)" }}>
+                {briefingTimestamp}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-sm" style={{ color: "var(--text-3)" }}>
+            {briefingAgentName} hasn&apos;t sent today&apos;s briefing yet. It arrives at 6am.
+          </div>
+        )}
       </div>
 
       {/* KPI strip */}

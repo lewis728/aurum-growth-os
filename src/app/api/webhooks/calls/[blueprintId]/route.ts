@@ -85,29 +85,42 @@ export async function POST(
 
   const leadStatus = deriveLeadStatus(analysis);
 
-  // ── 4. Resolve lead ───────────────────────────────────────────────────────────
+  // ── 4. Resolve lead identity ──────────────────────────────────────────────────
+  // Primary correlation is the Retell call_id, which the lead webhook persisted
+  // to Lead.retellCallId when it placed the speed-to-lead call. We fall back to
+  // the analysis-supplied leadId, then phone+blueprintId, for resilience.
+  const callId =
+    (typeof payload["call_id"] === "string" ? (payload["call_id"] as string) : null) ??
+    (payload["call"] as { call_id?: string } | undefined)?.call_id ??
+    null;
   const leadId    = analysis.leadId;
   const leadPhone = analysis.leadPhone;
 
-  if (!leadId && !leadPhone) {
+  if (!callId && !leadId && !leadPhone) {
     // No way to identify lead — log and return 200 (don't retry)
-    console.warn("[calls webhook] No leadId or leadPhone in analysis data.");
+    console.warn("[calls webhook] No call_id, leadId or leadPhone in payload.");
     return NextResponse.json({ success: true }, { status: 200 });
   }
 
   // ── 5. Heavy processing via setImmediate ──────────────────────────────────────
   setImmediate(async () => {
     try {
-      // Find lead
-      const lead = await prisma.lead.findFirst({
-        where: leadId
-          ? { id: leadId }
-          : { phone: leadPhone!, blueprintId },
-        select: { id: true, tenantId: true },
-      });
+      // Resolve lead — prefer the reliable Retell call_id correlation, then fall
+      // back to the analysis-supplied identifiers.
+      const select = { id: true, tenantId: true } as const;
+      let lead =
+        callId
+          ? await prisma.lead.findFirst({ where: { retellCallId: callId, blueprintId }, select })
+          : null;
+      if (!lead && leadId) {
+        lead = await prisma.lead.findFirst({ where: { id: leadId }, select });
+      }
+      if (!lead && leadPhone) {
+        lead = await prisma.lead.findFirst({ where: { phone: leadPhone, blueprintId }, select });
+      }
 
       if (!lead) {
-        console.warn("[calls webhook] Lead not found:", { leadId, leadPhone, blueprintId });
+        console.warn("[calls webhook] Lead not found:", { callId, leadId, leadPhone, blueprintId });
         return;
       }
 
@@ -131,7 +144,7 @@ export async function POST(
           }),
           prisma.lead.update({
             where: { id: lead.id },
-            data:  { status: "booked" },
+            data:  { status: "booked", callAnalysis: payload as object },
           }),
         ]);
 
