@@ -32,5 +32,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     take:    20,
   });
 
-  return NextResponse.json({ actions });
+  // tenantId returned so the client realtime subscription can filter on it.
+  return NextResponse.json({ tenantId, actions });
 }
