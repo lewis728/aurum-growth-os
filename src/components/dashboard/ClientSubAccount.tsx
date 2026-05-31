@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CreativePanel } from "@/components/dashboard/CreativePanel";
 import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
+import { PipelineBoard, type PipelineLead } from "@/components/dashboard/PipelineBoard";
 
 interface AgentAction {
   id:         string;
@@ -402,7 +403,21 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
         ))}
       </div>
 
-      {/* Recent leads */}
+      {/* CRM pipeline (Sprint 3B) — leads move automatically by derived stage. */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-medium" style={{ color: "var(--text-1)" }}>
+            Pipeline
+          </div>
+          <div className="text-[11px]" style={{ color: "var(--text-3)" }}>
+            {leads.length} total
+          </div>
+        </div>
+        <PipelineBoard leads={leads as unknown as PipelineLead[]} />
+      </div>
+
+      {/* Legacy recent-leads table — retained, hidden (false &&) as a fallback ref. */}
+      {false && (
       <div
         className="rounded-xl overflow-hidden"
         style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
@@ -468,6 +483,7 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
           </table>
         )}
       </div>
+      )}
 
       {/* Objections (Sprint 12) */}
       {objections.length > 0 && (
