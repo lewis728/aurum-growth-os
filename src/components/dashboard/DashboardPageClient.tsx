@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { SignedIn, SignedOut, RedirectToSignIn, UserButton } from "@clerk/nextjs";
 import AddClientWizard from "@/components/dashboard/AddClientWizard";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
@@ -590,6 +591,12 @@ function DashboardView() {
             {selectedClientId ? "Client" : activePage}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Link
+              href="/overview"
+              style={{ display: "flex", alignItems: "center", padding: "0 10px", height: "32px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", borderRadius: "6px", fontSize: "12px", color: "#888", textDecoration: "none" }}
+            >
+              God Mode
+            </Link>
             <button
               style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 10px", height: "32px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", borderRadius: "6px", fontSize: "12px", color: "#666", cursor: "pointer" }}
             >
