@@ -13,6 +13,7 @@ import { fetchWebsiteText, domainOf } from "@/lib/outreach/websiteText";
 import { sanitizeCompanyName } from "@/lib/outreach/nameSanitizer";
 import { qualifyProspect } from "@/lib/outreach/qualifier";
 import { buildSequence } from "@/lib/outreach/sequenceBuilder";
+import { enrichProspect, gradeLead, EMAILABLE_GRADES } from "@/lib/outreach/enrichment";
 
 /** After this many failed qualify attempts a prospect is parked as "errored". */
 export const MAX_ATTEMPTS = 3;
@@ -52,6 +53,14 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
     const websiteText = p.website ? await fetchWebsiteText(p.website) : "";
     const cleanName = p.cleanCompanyName || sanitizeCompanyName(p.companyName) || p.companyName;
 
+    // ── Enrichment (real signals before we judge) ───────────────────────────────
+    const signals = await enrichProspect({ companyName: cleanName, websiteText });
+    const enrichmentData = {
+      isRunningAds: signals.isRunningAds, reviewCount: signals.reviewCount,
+      reviewRating: signals.reviewRating, hasPhone: signals.hasPhone,
+      hasBooking: signals.hasBooking, enrichedAt: new Date(),
+    };
+
     // ── Stage gate ────────────────────────────────────────────────────────────
     const q = await qualifyProspect({
       companyName: cleanName,
@@ -69,9 +78,25 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
           status: nextStatus,
           qualified: q.qualified, fitScore: q.fit_score, qualifyReason: q.reasons,
           cleanCompanyName: cleanName, websiteDomain: domainOf(p.website),
+          leadGrade: q.errored ? null : "D", ...enrichmentData,
         },
       });
       return { prospectId, status: q.errored ? "error" : "rejected", qualified: q.qualified, fitScore: q.fit_score, reason: q.reasons };
+    }
+
+    // ── Grade the lead — only A/B are good enough to email ──────────────────────
+    const grade = gradeLead({ accepted: q.accepted, fitScore: q.fit_score, signals });
+    if (!EMAILABLE_GRADES.includes(grade)) {
+      // C-grade: real but borderline/thin — park as 'review', don't burn a send.
+      await prisma.outreachProspect.update({
+        where: { id: prospectId },
+        data: {
+          status: "review", leadGrade: grade,
+          qualified: q.qualified, fitScore: q.fit_score, qualifyReason: q.reasons,
+          cleanCompanyName: cleanName, websiteDomain: domainOf(p.website), ...enrichmentData,
+        },
+      });
+      return { prospectId, status: "review", qualified: q.qualified, fitScore: q.fit_score, reason: `Grade ${grade}: ${q.reasons}` };
     }
 
     // ── Build + persist the sequence ────────────────────────────────────────────
@@ -83,6 +108,9 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       vertical:     p.vertical,
       website:      p.website,
       websiteText,
+      hasAds:       signals.isRunningAds ?? undefined,
+      reviewCount:  signals.reviewCount ?? undefined,
+      reviewRating: signals.reviewRating ?? undefined,
       variantIndex: input.variantIndex,
       callLink:     input.callLink,
     });
@@ -103,14 +131,15 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       prisma.outreachProspect.update({
         where: { id: prospectId },
         data: {
-          status: "generated",
+          status: "generated", leadGrade: grade,
           qualified: true, fitScore: q.fit_score, qualifyReason: q.reasons,
           customHook: built.customHook, cleanCompanyName: cleanName, websiteDomain: domainOf(p.website),
+          ...enrichmentData,
         },
       }),
     ]);
 
-    return { prospectId, status: "generated", qualified: true, fitScore: q.fit_score, customHook: built.customHook, reason: q.reasons };
+    return { prospectId, status: "generated", qualified: true, fitScore: q.fit_score, customHook: built.customHook, reason: `Grade ${grade}: ${q.reasons}` };
   } catch (err) {
     console.error("[outreach/persist] processProspect failed:", err instanceof Error ? err.message : err);
     // Respect the attempt cap on the failure path too, so a permanently-failing

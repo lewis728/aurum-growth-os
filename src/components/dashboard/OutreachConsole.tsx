@@ -53,13 +53,15 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   qualifying: { label: "Qualifying", color: "#a1a1aa" },
   rejected:   { label: "Rejected",   color: "#ef4444" },
   errored:    { label: "Errored",    color: "#f59e0b" },
+  review:     { label: "Review (C)",  color: "#a1a1aa" },
+  dormant:    { label: "Dormant",    color: "#6366f1" },
   generated:  { label: "Generated",  color: GOLD },
   emailing:   { label: "Emailing",   color: "#3b82f6" },
   replied:    { label: "Replied",    color: "#22c55e" },
   booked:     { label: "Booked",     color: "#22c55e" },
   closed:     { label: "Closed",     color: "#52525b" },
 };
-const STATUS_OPTIONS = ["pending", "qualifying", "generated", "emailing", "replied", "booked", "rejected", "errored", "closed"];
+const STATUS_OPTIONS = ["pending", "qualifying", "review", "generated", "emailing", "replied", "booked", "dormant", "rejected", "errored", "closed"];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";

@@ -15,7 +15,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { processProspect } from "@/lib/outreach/persist";
 import { chooseVariant, abReport } from "@/lib/outreach/abTuner";
-import { injectLeads, instantlyConfigured, type InstantlyLead } from "@/lib/outreach/instantlyClient";
+import { dispatchProspects } from "@/lib/outreach/dispatch";
+import { reengageDueProspects } from "@/lib/outreach/reengagement";
 import { notifyOwner } from "@/lib/outreach/notify";
 import { logOutreachEvent } from "@/lib/outreach/events";
 
@@ -25,6 +26,9 @@ export const maxDuration = 600;
 const GEN_LIMIT = 30;       // prospects qualified+written per run
 const PUSH_LIMIT = 50;      // prospects injected to Instantly per run
 const CONCURRENCY = 4;
+// A clinic that finished all 5 emails this many days ago with no reply goes dormant
+// (then re-engages 90 days later). 14 covers the day-0..14 cadence + a buffer.
+const SEQUENCE_DAYS = 18;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   if ((req.headers.get("authorization") ?? "") !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -36,7 +40,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .findMany({ distinct: ["tenantId"], select: { tenantId: true } })
     .catch(() => [] as { tenantId: string }[]);
 
-  const summary = { tenants: tenants.length, generated: 0, rejected: 0, errored: 0, pushed: 0 };
+  const summary = { tenants: tenants.length, generated: 0, rejected: 0, errored: 0, pushed: 0, dormant: 0, reengaged: 0 };
 
   for (const { tenantId } of tenants) {
     // ── 1. Generate sequences for pending prospects ───────────────────────────
@@ -59,37 +63,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
 
-    // ── 2. Auto-push generated → Instantly ────────────────────────────────────
-    if (instantlyConfigured()) {
-      const ready = await prisma.outreachProspect.findMany({
-        where: { tenantId, status: "generated", contactEmail: { not: null }, customHook: { not: null }, unsubscribed: false },
-        take: PUSH_LIMIT,
-        select: { id: true, firstName: true, companyName: true, cleanCompanyName: true, contactEmail: true, customHook: true },
-      }).catch(() => []);
+    // ── 2. Auto-push generated → Instantly (suppression-checked, message-logged) ─
+    const disp = await dispatchProspects({ tenantId, limit: PUSH_LIMIT });
+    summary.pushed += disp.pushed;
 
-      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const eligible = ready.filter((p) => p.contactEmail && EMAIL_RE.test(p.contactEmail) && p.customHook);
-      if (eligible.length > 0) {
-        const leads: InstantlyLead[] = eligible.map((p) => ({
-          email: p.contactEmail as string,
-          first_name: p.firstName ?? "there",
-          custom_hook: p.customHook ?? "",
-          custom_clean_name: p.cleanCompanyName ?? p.companyName,
-        }));
-        const res = await injectLeads(leads);
-        await Promise.all(eligible.map((p, i) => {
-          const id = res.leadIds[i];
-          if (!id) return Promise.resolve();
-          summary.pushed++;
-          return prisma.outreachProspect.update({
-            where: { id: p.id },
-            data: { status: "emailing", instantlyLeadId: id, emailsSent: 1, lastEmailAt: new Date() },
-          }).catch(() => {});
-        }));
-      }
-    }
+    // ── 2b. Mark finished-but-silent sequences dormant (→ 90-day re-engagement) ─
+    const seqDoneBefore = new Date(Date.now() - SEQUENCE_DAYS * 24 * 60 * 60 * 1000);
+    const dormant = await prisma.outreachProspect.updateMany({
+      where: { tenantId, status: "emailing", repliedAt: null, lastEmailAt: { lte: seqDoneBefore } },
+      data:  { status: "dormant", dormantAt: new Date(), reengageAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) },
+    }).catch(() => ({ count: 0 }));
+    summary.dormant += dormant.count;
 
-    await logOutreachEvent(tenantId, "autopilot_run", `gen ${summary.generated} push ${summary.pushed} rej ${summary.rejected} err ${summary.errored}`);
+    // ── 2c. Re-engage dormant prospects whose 90 days are up (fresh angle) ──────
+    const re = await reengageDueProspects(tenantId, 25);
+    summary.reengaged += re.requeued;
+
+    await logOutreachEvent(tenantId, "autopilot_run", `gen ${summary.generated} push ${summary.pushed} dormant ${summary.dormant} reengaged ${summary.reengaged} rej ${summary.rejected} err ${summary.errored}`);
 
     // ── 3. Daily digest (once/day, at the 6am-ish run) ────────────────────────
     const hour = new Date().getUTCHours();

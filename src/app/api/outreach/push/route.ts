@@ -12,8 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
-import { injectLeads, instantlyConfigured, type InstantlyLead } from "@/lib/outreach/instantlyClient";
+import { dispatchProspects } from "@/lib/outreach/dispatch";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -34,54 +33,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Provide prospectIds[] or { all: true }." }, { status: 400 });
   }
 
-  const prospects = await prisma.outreachProspect.findMany({
-    where: {
-      tenantId,
-      status: "generated",
-      contactEmail: { not: null },
-      ...(pushAll ? {} : { id: { in: ids } }),
-    },
-    select: { id: true, firstName: true, companyName: true, cleanCompanyName: true, contactEmail: true, customHook: true },
-  });
+  // Shared dispatcher: suppression-checked, message-logged, Instantly inject.
+  const r = await dispatchProspects({ tenantId, prospectIds: pushAll ? undefined : ids });
 
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const eligible = prospects.filter((p) => p.contactEmail && EMAIL_RE.test(p.contactEmail) && p.customHook);
-  if (eligible.length === 0) {
-    return NextResponse.json({
-      ok: false,
-      pushed: 0,
-      error: "No eligible prospects (need status 'generated', an email, and a generated hook).",
-    }, { status: 200 });
-  }
-
-  if (!instantlyConfigured()) {
+  if (r.notConfigured) {
     return NextResponse.json({
       ok: false, pushed: 0, notConfigured: true,
       error: "Instantly not configured (set INSTANTLY_API_KEY and INSTANTLY_CAMPAIGN_ID). Sequences are generated and ready to export.",
-      eligible: eligible.length,
     }, { status: 200 });
   }
 
-  const leads: InstantlyLead[] = eligible.map((p) => ({
-    email:             p.contactEmail as string,
-    first_name:        p.firstName ?? "there",
-    custom_hook:       p.customHook ?? "",
-    custom_clean_name: p.cleanCompanyName ?? p.companyName,
-  }));
-
-  const result = await injectLeads(leads);
-
-  // Persist successes: move to 'emailing', store the Instantly lead id.
-  await Promise.all(
-    eligible.map((p, i) => {
-      const leadId = result.leadIds[i];
-      if (!leadId) return Promise.resolve();
-      return prisma.outreachProspect.update({
-        where: { id: p.id },
-        data:  { status: "emailing", instantlyLeadId: leadId, emailsSent: 1, lastEmailAt: new Date() },
-      }).catch(() => {});
-    }),
-  );
-
-  return NextResponse.json({ ok: result.ok, pushed: result.injected, failed: result.failed });
+  return NextResponse.json({
+    ok: r.pushed > 0,
+    pushed: r.pushed, failed: r.failed, suppressed: r.suppressed, ineligible: r.ineligible,
+  });
 }

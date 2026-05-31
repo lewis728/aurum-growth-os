@@ -22,6 +22,8 @@ import { decideReply } from "@/lib/outreach/replyAgent";
 import { sendReply } from "@/lib/outreach/instantlyClient";
 import { notifyOwner } from "@/lib/outreach/notify";
 import { logOutreachEvent } from "@/lib/outreach/events";
+import { logInbound } from "@/lib/outreach/messages";
+import { suppress } from "@/lib/outreach/suppression";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -67,6 +69,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   await logOutreachEvent(prospect.tenantId, "reply_received", replyText.slice(0, 500), prospect.id);
+  // Store the inbound reply in the system-of-record.
+  await logInbound({ tenantId: prospect.tenantId, prospectId: prospect.id, body: replyText });
 
   const calendlyLink = process.env.OUTREACH_CALENDLY_LINK || "";
   const decision = await decideReply({
@@ -91,6 +95,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }).catch(() => {});
 
   if (decision.unsubscribe) {
+    // Permanent do-not-contact — honoured across all campaigns forever.
+    await suppress(prospect.tenantId, prospect.contactEmail ?? "", `opt-out via reply: ${decision.flagReason}`, prospect.website);
     await logOutreachEvent(prospect.tenantId, "unsubscribed", prospect.companyName, prospect.id);
     await notifyOwner(decision.summary);
     return NextResponse.json({ ok: true, intent: decision.intent, action: "suppressed" }, { status: 200 });

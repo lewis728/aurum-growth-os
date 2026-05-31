@@ -589,15 +589,65 @@ model OutreachProspect {
   unsubscribed     Boolean  @default(false) // honoured forever — never contacted again
   flagged          Boolean  @default(false) // needs human eyes (angry/legal/ambiguous)
   flagReason       String?
+  // ── Lead quality (enrichment grades the lead BEFORE we email) ────────────────
+  leadGrade        String?  // A|B|C|D — only A/B get emailed
+  isRunningAds     Boolean? // detected via Meta Ad Library — the strongest buy signal
+  reviewCount      Int?
+  reviewRating     Float?
+  hasPhone         Boolean? // phone on site → leads can be called
+  hasBooking       Boolean? // booking system detected
+  enrichedAt       DateTime?
+  // ── 90-day re-engagement lifecycle ──────────────────────────────────────────
+  dormantAt        DateTime? // when the 5-email sequence finished with no reply
+  reengageAt       DateTime? // when this dormant lead becomes re-engageable (dormant + 90d)
+  reengageCount    Int      @default(0) // capped so we never become a pest
   notes            String?  @db.Text
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   sequences        OutreachSequence[]
+  messages         OutreachMessage[]
 
   @@unique([tenantId, websiteDomain])
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, leadGrade])
+  @@index([status, reengageAt])
   @@index([vertical])
+}
+
+// The system of record — every email we send and every reply we receive, kept
+// forever and searchable. This is the "place that stores all the emails".
+model OutreachMessage {
+  id          String   @id @default(cuid())
+  tenantId    String
+  prospectId  String?
+  direction   String   // outbound | inbound
+  channel     String   @default("email")
+  emailNumber Int?     // sequence step 1-5 (null for replies / re-engagement)
+  subject     String?
+  body        String?  @db.Text
+  status      String   @default("sent") // sent | failed | received
+  externalId  String?  // Instantly message/lead id when known
+  createdAt   DateTime @default(now())
+  prospect    OutreachProspect? @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([prospectId])
+  @@index([tenantId, direction])
+}
+
+// Permanent do-not-contact list — opt-outs, bounces, complaints. Checked before
+// EVERY send, across all campaigns, forever. Protects the domain + keeps us legal.
+model OutreachSuppression {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  domain    String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, email])
+  @@index([tenantId, domain])
 }
 
 // Append-only audit of everything the autonomous outreach agent does — powers the

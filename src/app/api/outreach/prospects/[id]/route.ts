@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_STATUS = new Set(["pending", "qualifying", "rejected", "errored", "generated", "emailing", "replied", "booked", "closed"]);
+const ALLOWED_STATUS = new Set(["pending", "qualifying", "rejected", "errored", "review", "generated", "emailing", "replied", "booked", "dormant", "closed"]);
 
 async function owns(id: string, tenantId: string): Promise<boolean> {
   const p = await prisma.outreachProspect.findFirst({ where: { id, tenantId }, select: { id: true } });
