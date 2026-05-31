@@ -27,6 +27,7 @@ import {
   createRetellAgent,
   updateRetellLlmPrompt,
   resolveRetellVoiceId,
+  JODI_FEMALE_VOICE_ID,
 } from "@/lib/services/retellService";
 import { assembleVoicePromptFromBrief } from "@/lib/services/retellPromptAssembler";
 import { CampaignStatus } from "@/enums/campaignEnums";
@@ -124,7 +125,10 @@ export async function provisionClientAgent(
   const systemPrompt = await assembleVoicePromptFromBrief({ blueprint, representative: rep, brief });
 
   const webhookUrl     = `${appBaseUrl()}/api/webhooks/calls/${blueprintId}`;
-  const resolvedVoice  = resolveRetellVoiceId(rep.voiceId);
+  // When the agency owner picks no voice, default to the Jodi female voice.
+  // (resolveRetellVoiceId already returns Jodi for null/empty — this makes the
+  // intent explicit and honours any specific voice the owner did choose.)
+  const resolvedVoice  = resolveRetellVoiceId(rep.voiceId ?? JODI_FEMALE_VOICE_ID);
   const existingVoice  =
     blueprintRow.voice && typeof blueprintRow.voice === "object"
       ? (blueprintRow.voice as VoiceLayerIds)

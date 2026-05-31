@@ -144,24 +144,46 @@ export async function updateRetellAgent(
 // To create a dedicated agent you create the LLM first, then the agent that
 // references it. The prompt is later updated on the LLM (NOT the agent).
 
+// The "Jodi" custom voice — Aurum's default female voice. Used for every female
+// voice selection and as the overall default unless a specific voice is requested.
+export const JODI_FEMALE_VOICE_ID = "custom_voice_53f085b5be6285068230823428";
+
 /**
- * Maps our internal voice aliases to real Retell voice IDs. Real Retell IDs
- * (e.g. "11labs-Adrian") are passed through untouched. Unknown values fall back
- * to a safe default so provisioning never fails on a bad alias.
+ * Maps our internal voice aliases to real Retell voice IDs.
+ *
+ * Resolution order:
+ *   1. Explicit Retell/custom voice ids are passed through untouched
+ *      (provider-prefixed "11labs-…"/"openai-…" etc, or any "custom_voice_…").
+ *   2. Any female selection (female_british, female_american, female-us, plain
+ *      "female", …) → the Jodi custom voice.
+ *   3. Known male aliases → their 11labs voice.
+ *   4. Anything unrecognised / empty → Jodi (the default).
+ *
+ * Never throws — always returns a usable voice id so provisioning can't fail on
+ * a bad alias.
  */
 export function resolveRetellVoiceId(voiceId: string | null | undefined): string {
-  const DEFAULT = "11labs-Adrian";
-  if (!voiceId) return DEFAULT;
+  if (!voiceId) return JODI_FEMALE_VOICE_ID;
   const v = voiceId.trim();
-  // Already a provider-prefixed Retell voice id — pass through.
+
+  // 1. Already an explicit Retell voice id (provider-prefixed) or a custom voice
+  //    id — a specific voice was requested, so honour it exactly.
+  if (/^custom_voice_/i.test(v)) return v;
   if (v.includes("-") && /^(11labs|openai|deepgram|elevenlabs|play)/i.test(v)) return v;
-  const ALIASES: Record<string, string> = {
-    "female-british": "11labs-Lily",
-    "male-british":   "11labs-Oliver",
-    "female-us":      "11labs-Anna",
-    "male-us":        "11labs-Adrian",
+
+  const key = v.toLowerCase();
+
+  // 3. Known male aliases (normalise - and _ separators).
+  const MALE_ALIASES: Record<string, string> = {
+    "male-british": "11labs-Oliver",
+    "male-us":      "11labs-Adrian",
+    "male":         "11labs-Adrian",
   };
-  return ALIASES[v.toLowerCase()] ?? DEFAULT;
+  const male = MALE_ALIASES[key.replace(/_/g, "-")];
+  if (male) return male;
+
+  // 2 & 4. Every female selection — and any unrecognised/default value — uses Jodi.
+  return JODI_FEMALE_VOICE_ID;
 }
 
 interface CreateLlmParams {
