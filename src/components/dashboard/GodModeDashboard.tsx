@@ -29,7 +29,7 @@ interface PortfolioRow {
 }
 interface FlaggedClient { blueprintId: string; businessName: string; reason: string; recommended: string; flaggedAt: string }
 interface Overview {
-  topStrip: { leadsToday: number; bookedToday: number; revenueThisMonthGbp: number; activeCampaigns: number };
+  topStrip: { leadsToday: number; bookedToday: number; revenueThisMonthGbp: number; activeCampaigns: number; pipelineValueGbp: number };
   briefing: { text: string; generatedAt: string } | null;
   flagged:  FlaggedClient[];
   clients:  PortfolioRow[];
@@ -58,7 +58,7 @@ function timeAgo(iso: string): string {
 export function GodModeDashboard() {
   const { data, isLoading } = useSWR<Overview>("/api/dashboard/overview", fetcher, { refreshInterval: 30_000 });
 
-  const top = data?.topStrip ?? { leadsToday: 0, bookedToday: 0, revenueThisMonthGbp: 0, activeCampaigns: 0 };
+  const top = data?.topStrip ?? { leadsToday: 0, bookedToday: 0, revenueThisMonthGbp: 0, activeCampaigns: 0, pipelineValueGbp: 0 };
   const clients  = data?.clients  ?? [];
   const flagged  = data?.flagged  ?? [];
   const briefing = data?.briefing ?? null;
@@ -67,6 +67,7 @@ export function GodModeDashboard() {
     { label: "Leads today",        value: String(top.leadsToday) },
     { label: "Booked today",       value: String(top.bookedToday) },
     { label: "Revenue this month", value: gbp(top.revenueThisMonthGbp) },
+    { label: "Pipeline value",     value: gbp(top.pipelineValueGbp) },
     { label: "Active campaigns",   value: String(top.activeCampaigns) },
   ];
 
@@ -109,7 +110,7 @@ export function GodModeDashboard() {
         </section>
 
         {/* KPI strip */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "24px" }}>
           {kpis.map((k) => (
             <div key={k.label} style={{
               background: "var(--surface-1, #0a0a0a)", border: "1px solid var(--border, rgba(255,255,255,0.06))",

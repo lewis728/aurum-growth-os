@@ -23,6 +23,30 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 3B — Per-client CRM pipeline (2026-05-31):**
+- Migration (applied to prod via Supabase MCP): `Lead.pipelineStage` (default
+  "new"), `convertedAt`, `dealValue`, + `@@index([tenantId, pipelineStage])`.
+  `source` already existed.
+- `src/lib/crm/pipeline.ts`: stages new→called→qualified→booked→showed→converted
+  + sub-states (no_answer/no_show/not_interested/retry_queue). `derivePipelineStage`
+  is the single source of truth — stage is DERIVED from `status` + appointment
+  outcome (no scattered per-event writes to drift). Pure + total.
+- `GET /api/leads`: returns each lead's derived stage + appointment, and lazily
+  reconciles the stored `pipelineStage` column when it drifts (best-effort, never
+  blocks the response) so God Mode's indexed aggregate stays accurate.
+- `POST/DELETE /api/leads/[leadId]/convert`: the one explicit transition — owner
+  marks a won deal (+ optional dealValue); DELETE un-converts. Tenant-scoped.
+- `PipelineBoard.tsx`: stage-column board, score dots (green 7-10/amber 4-6/red
+  1-3), time-in-stage, expandable card (call summary + appointment + convert).
+- God Mode: new **Pipeline value** KPI = open appointments × avg client value,
+  computed from the authoritative Appointment table (not the lazily-synced column).
+- **DEFERRED (tooling glitch, NOT done):** mounting `PipelineBoard` inside
+  `ClientSubAccount.tsx` — the edit channel corrupted the file mid-edit (duplicated
+  a line); reverted to known-good to protect it. The board + API are live; the
+  sub-account still renders the old leads table until the mount lands. Per-lead
+  AgentAction timeline also deferred — AgentAction has no `leadId` column, so the
+  card shows callAnalysis summary + appointment instead (honest data we actually have).
+
 **Sprint 5 — ROI reporting + per-client reports (2026-05-31):**
 - `monthlyReportGenerator.ts` (already existed — enhanced, not created):
   - **Revenue** = booked × `ClientBrief.averageClientValue` (works without Meta);

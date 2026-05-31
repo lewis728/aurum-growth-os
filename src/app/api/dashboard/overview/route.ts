@@ -42,14 +42,14 @@ interface FlaggedClient {
   flaggedAt:    string;
 }
 interface OverviewResponse {
-  topStrip: { leadsToday: number; bookedToday: number; revenueThisMonthGbp: number; activeCampaigns: number };
+  topStrip: { leadsToday: number; bookedToday: number; revenueThisMonthGbp: number; activeCampaigns: number; pipelineValueGbp: number };
   briefing: { text: string; generatedAt: string } | null;
   flagged:  FlaggedClient[];
   clients:  PortfolioRow[];
 }
 
 const EMPTY: OverviewResponse = {
-  topStrip: { leadsToday: 0, bookedToday: 0, revenueThisMonthGbp: 0, activeCampaigns: 0 },
+  topStrip: { leadsToday: 0, bookedToday: 0, revenueThisMonthGbp: 0, activeCampaigns: 0, pipelineValueGbp: 0 },
   briefing: null,
   flagged:  [],
   clients:  [],
@@ -86,7 +86,7 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json(EMPTY);
     }
 
-    const [reps, briefs, leadsTodayRows, bookedTodayRows, bookedMonthRows, riskActions, briefingAction, recentActions] =
+    const [reps, briefs, leadsTodayRows, bookedTodayRows, bookedMonthRows, openApptRows, riskActions, briefingAction, recentActions] =
       await Promise.all([
         prisma.aIRepresentative.findMany({
           where:  { tenantId, blueprintId: { in: blueprintIds } },
@@ -111,6 +111,14 @@ export async function GET(): Promise<NextResponse> {
           where:  { tenantId, createdAt: { gte: monthStart } },
           _count: { _all: true },
         }),
+        // Open pipeline = unresolved appointments (future/unconfirmed-outcome).
+        // Authoritative count from the Appointment table — not the lazily-synced
+        // Lead.pipelineStage column — so God Mode value is always accurate.
+        prisma.appointment.groupBy({
+          by:     ["blueprintId"],
+          where:  { tenantId, status: { in: ["confirmed", "scheduled"] } },
+          _count: { _all: true },
+        }),
         prisma.agentAction.findMany({
           where:   { tenantId, actionType: "CLIENT_AT_RISK" },
           orderBy: { executedAt: "desc" },
@@ -133,6 +141,14 @@ export async function GET(): Promise<NextResponse> {
     const leadsToday  = new Map<string | null, number>(leadsTodayRows.map((r) => [r.blueprintId, r._count._all]));
     const bookedToday = new Map<string | null, number>(bookedTodayRows.map((r) => [r.blueprintId, r._count._all]));
     const bookedMonth = new Map<string | null, number>(bookedMonthRows.map((r) => [r.blueprintId, r._count._all]));
+    const openAppts   = new Map<string | null, number>(openApptRows.map((r) => [r.blueprintId, r._count._all]));
+
+    // Pipeline value = open appointments × that client's average client value.
+    let pipelineValueGbp = 0;
+    for (const b of blueprints) {
+      const avg = avgValueByClient.get(b.id);
+      if (avg != null) pipelineValueGbp += (openAppts.get(b.id) ?? 0) * avg;
+    }
 
     // Last action per blueprint (most recent first → take the first seen).
     const lastActionByClient = new Map<string, LastAction>();
@@ -183,6 +199,7 @@ export async function GET(): Promise<NextResponse> {
         bookedToday:         Array.from(bookedToday.values()).reduce((s, n) => s + n, 0),
         revenueThisMonthGbp: clients.reduce((s, c) => s + (c.revenueThisMonthGbp ?? 0), 0),
         activeCampaigns:     blueprints.filter((b) => b.status === "live").length,
+        pipelineValueGbp:    Math.round(pipelineValueGbp),
       },
       briefing: briefingAction
         ? { text: briefingAction.reasoning, generatedAt: briefingAction.executedAt.toISOString() }

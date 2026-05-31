@@ -136,6 +136,10 @@ model Lead {
   leadScore       Int?     // 1-10 intent score computed at webhook receipt
   callAnalysis    Json?    // CallAnalysis from Retell post-call webhook
   formData        Json?    // Raw form fields from landing page
+  // ── CRM pipeline (Sprint 3B) ────────────────────────────────────────────────
+  pipelineStage   String   @default("new") // new|called|qualified|booked|showed|converted (+ sub: no_answer|no_show|not_interested|retry_queue). Derived from status+appointment; persisted for indexed aggregates.
+  convertedAt     DateTime? // set when the agency owner marks the lead converted
+  dealValue       Float?    // actual deal value at conversion (overrides est. avg client value)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   blueprint       CampaignBlueprint? @relation(fields: [blueprintId], references: [id])
@@ -143,6 +147,7 @@ model Lead {
   @@index([blueprintId])
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, pipelineStage])
   @@unique([tenantId, email]) // For Calendly lead deduplication by email
 }
 
