@@ -85,9 +85,11 @@ export async function createPhoneCall(
       });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        // Capture the RAW body — Retell often returns the real reason in a
+        // non-{message} shape, which the previous parse swallowed as "unknown".
+        const rawErr = await res.text().catch(() => "");
         throw new Error(
-          `Retell create-phone-call failed: HTTP ${res.status} — ${body.message ?? "unknown error"}`
+          `Retell create-phone-call failed: HTTP ${res.status} — ${rawErr || "no body"}`
         );
       }
 
