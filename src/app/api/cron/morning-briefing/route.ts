@@ -1,14 +1,15 @@
 /**
  * GET /api/cron/morning-briefing
  *
- * Generates a fresh first-person morning briefing for every LIVE blueprint.
- * Scheduled at 06:00 daily via vercel.json cron.
- * Protected by CRON_SECRET — Vercel injects this automatically for cron routes.
+ * Runs the REPORTER role (Ava) for every LIVE blueprint each morning: generates
+ * the first-person morning briefing, detects at-risk clients (→ Slack), and logs
+ * booking milestones. Scheduled at 06:00 daily via vercel.json.
+ * Protected by CRON_SECRET.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateMorningBriefing } from "@/lib/services/morningBriefingService";
+import { runReporterCycle } from "@/lib/agents/roles/reporter";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min — enough for all live blueprints
@@ -29,29 +30,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   });
 
   if (blueprints.length === 0) {
-    return NextResponse.json({
-      generated: 0,
-      failed:    0,
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json({ generated: 0, atRisk: 0, milestones: 0, failed: 0, timestamp: new Date().toISOString() });
   }
 
-  // ── Generate for each (settle all, never throw) ───────────────────────────
+  // ── Run the reporter for each (settle all, never throw) ────────────────────
   const results = await Promise.allSettled(
-    blueprints.map(bp => generateMorningBriefing(bp.id, bp.tenantId))
+    blueprints.map((bp) => runReporterCycle(bp.id, bp.tenantId)),
   );
 
-  // A briefing "failed" if the promise rejected OR resolved to null.
-  const generated = results.filter(r => r.status === "fulfilled" && r.value !== null).length;
-  const failed    = blueprints.length - generated;
-
-  if (failed > 0) {
-    console.error(`[cron/morning-briefing] ${failed}/${blueprints.length} briefings failed`);
+  let generated = 0, atRisk = 0, milestones = 0, failed = 0;
+  for (const r of results) {
+    if (r.status !== "fulfilled") { failed++; continue; }
+    if (r.value.briefing) generated++; else failed++;
+    if (r.value.atRisk) atRisk++;
+    if (r.value.milestone !== null) milestones++;
   }
 
-  return NextResponse.json({
-    generated,
-    failed,
-    timestamp: new Date().toISOString(),
-  });
+  if (failed > 0) {
+    console.error(`[cron/morning-briefing] ${failed}/${blueprints.length} reporter cycles had no briefing`);
+  }
+
+  return NextResponse.json({ generated, atRisk, milestones, failed, timestamp: new Date().toISOString() });
 }
