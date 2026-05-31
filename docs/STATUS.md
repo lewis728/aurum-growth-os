@@ -42,12 +42,14 @@ white-label branding, team seats/roles.
   textareas (char count, 160 warn, preview with dummy data) + call-script editor
   ("Save & push live").
 - New clients seed `smsTemplates` from the vertical defaults.
+- **All five send sites wired:** booked confirmation + qualifiedNudge (scheduler.ts),
+  day-before/hour-before/confirmation reminders (twilioService), and noShow
+  (cron/reminders) all read `resolveTemplate` (owner override → vertical default →
+  generic) and render the canonical {{vars}}. Booking-link append preserved on
+  nudge/no-show only when the template carries no URL of its own.
 - **Honest scope:** the spec's "20 verticals" → I seeded the 6 most relevant
   aesthetics-adjacent verticals; the rest fall through to solid generic defaults
-  (not 20 bespoke sets). `qualifiedNudge`/`noShow` templates are defined + editable
-  but the qualified-nudge/no-show send sites still use their own inline copy — they
-  read the template set in a follow-up; reminders (the main 3) are fully wired.
-  Runtime-unverified. tsc 0.
+  (not 20 bespoke sets). Runtime-unverified. tsc 0.
 
 **Sprint 10F — Cross-tenant vector knowledge graph (2026-05-31):**
 - **pgvector 0.8.0 ENABLED** in prod (Supabase MCP); `VectorKnowledge` table with

@@ -26,6 +26,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioService";
+import { resolveTemplate, renderTemplate, parseSmsTemplates } from "@/lib/services/smsTemplates";
 import { extractObjections } from "@/lib/services/objectionService";
 import { createCalendarEvent } from "@/lib/services/calendarService";
 import type { LeadStatus } from "@/types/lead";
@@ -101,10 +102,16 @@ export async function handleCallOutcome(
 
     const blueprint = await prisma.campaignBlueprint.findUnique({
       where:  { id: blueprintId },
-      select: { businessName: true, deployment: true },
+      select: {
+        businessName: true, deployment: true, vertical: true,
+        clientBrief: { select: { smsTemplates: true } },
+      },
     });
     const businessName = blueprint?.businessName ?? "us";
     const landingUrl   = (blueprint?.deployment as { websiteUrl?: string } | null)?.websiteUrl ?? null;
+    // Sprint 3D: owner-editable templates → vertical default → generic.
+    const savedTemplates = parseSmsTemplates(blueprint?.clientBrief?.smsTemplates);
+    const vertical       = blueprint?.vertical ?? null;
 
     // Best-effort SMS — never blocks lead/appointment persistence.
     const safeSms = async (body: string): Promise<void> => {
@@ -157,7 +164,9 @@ export async function handleCallOutcome(
         weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
       });
       await safeSms(
-        `Hi ${lead.firstName}, great speaking with you! Your appointment with ${businessName} is confirmed for ${when}. See you then.`,
+        renderTemplate(resolveTemplate("bookedConfirmation", savedTemplates, vertical), {
+          lead_first_name: lead.firstName, business_name: businessName, appointment_time: when,
+        }),
       );
 
       return { status: 200, body: { success: true, booked: true } };
@@ -170,10 +179,11 @@ export async function handleCallOutcome(
     });
 
     if (leadStatus === "qualified") {
-      await safeSms(
-        `Hi ${lead.firstName}, ${businessName} would love to help.` +
-        (landingUrl ? ` Book your free consultation: ${landingUrl}` : " Reply here to book your free consultation."),
-      );
+      const nudge = renderTemplate(resolveTemplate("qualifiedNudge", savedTemplates, vertical), {
+        lead_first_name: lead.firstName, business_name: businessName,
+      });
+      // Preserve the booking link: append it only if the template carries no URL.
+      await safeSms(landingUrl && !/https?:\/\//.test(nudge) ? `${nudge} ${landingUrl}` : nudge);
     }
 
     return { status: 200, body: { success: true } };

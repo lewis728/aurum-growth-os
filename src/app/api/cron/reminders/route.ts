@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { sendDirectSMS } from "@/lib/services/twilioService";
 import { placeSpeedToLeadCall } from "@/lib/services/speedToLeadService";
 import { isOpenForReengagement, type ConversationState } from "@/lib/crm/conversationState";
+import { resolveTemplate, renderTemplate, parseSmsTemplates } from "@/lib/services/smsTemplates";
 
 export const dynamic = "force-dynamic";
 
@@ -153,7 +154,12 @@ async function processNoShows(): Promise<number> {
     take:    NOSHOW_BATCH,
     include: {
       lead:      { select: { firstName: true, phone: true } },
-      blueprint: { select: { businessName: true, deployment: true } },
+      blueprint: {
+        select: {
+          businessName: true, deployment: true, vertical: true,
+          clientBrief: { select: { smsTemplates: true } },
+        },
+      },
     },
   });
 
@@ -164,8 +170,12 @@ async function processNoShows(): Promise<number> {
 
       const businessName = appt.blueprint?.businessName ?? "us";
       const link = (appt.blueprint?.deployment as { websiteUrl?: string } | null)?.websiteUrl;
-      const body = `Hi ${appt.lead.firstName}, we missed you for your appointment with ${businessName} today. ` +
-        `Want to rebook?${link ? ` ${link}` : ""}`;
+      // Sprint 3D: owner-editable no-show template → vertical default → generic.
+      const tpl = renderTemplate(
+        resolveTemplate("noShow", parseSmsTemplates(appt.blueprint?.clientBrief?.smsTemplates), appt.blueprint?.vertical ?? null),
+        { lead_first_name: appt.lead.firstName, business_name: businessName },
+      );
+      const body = link && !/https?:\/\//.test(tpl) ? `${tpl} ${link}` : tpl;
       await sendDirectSMS(appt.lead.phone, body);
       processed++;
     } catch (err) {
