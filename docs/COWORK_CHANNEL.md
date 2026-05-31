@@ -321,6 +321,145 @@ After building: tsc clean, commit, push, then continue to Sprint 11.
 
 ---
 
+### SPRINT 10C — Pre-Flight Creative Simulation (BUILD BEFORE SPRINT 11)
+
+Before any ad creative is deployed to Meta, it must pass a simulation by 15 LLM consumer personas. No client capital is ever spent on unproven angles.
+
+**The Simulation Engine:**
+Create src/lib/services/creativeSimulator.ts
+
+When the Creative Director generates ad variants, before pushing to Meta:
+1. Generate 15 psychographic personas matching the client's target demographic from ClientBrief (age range, income level, skepticism level, time sensitivity, pain points)
+2. Feed each creative asset (copy + hook + image description) to each persona
+3. Each persona returns: { clickProbabilityScore: 1-10, primaryObjection: string, wouldConvert: boolean }
+4. Aggregate: if mean score < 7.5 OR any policy flag raised → block the creative, route back to generator with exact objection list as modification constraints
+5. Only assets scoring 7.5+ get added to the deployment queue
+
+Store simulation results in a new CreativeSimulation table.
+The agency owner sees simulation scores on every creative in the Higgsfield panel.
+
+Schema:
+model CreativeSimulation {
+  id            String   @id @default(cuid())
+  blueprintId   String
+  tenantId      String
+  creativeId    String
+  personaScores Json     -- array of { persona, score, objection }
+  meanScore     Float
+  passed        Boolean
+  blockedReason String?
+  createdAt     DateTime @default(now())
+}
+
+---
+
+### SPRINT 10D — Lead Fingerprinting & Hyper-Personalised Handoff (BUILD BEFORE SPRINT 11)
+
+During the 45-60 second window between form submission and Sophie's first call, enrich the lead and personalise the approach.
+
+Create src/lib/services/leadEnrichmentService.ts
+
+When a lead webhook fires:
+1. Extract first name, phone, email from the payload
+2. In parallel (Promise.allSettled, never blocks the call):
+   - Query a data enrichment API (Hunter.io or Clearbit) for company/role/income signals
+   - Check if email domain is corporate (signals business owner vs consumer)
+   - Run a basic affordability signal from postcode if available (UK postcode → ONS income data)
+3. Build a LeadContextPackage: { tier: 'standard' | 'premium', signals: string[], enrichmentData: {} }
+4. Save to Lead.enrichmentData (Json field)
+5. Inject into Sophie's Retell dynamic variables BEFORE the call fires:
+   - Standard lead: incentive frame ("secure your consultation slot + £50 voucher")
+   - Premium lead (high-income signals): exclusivity frame ("limited VIP consultation, no discount language")
+
+The call script must reference {{lead_tier}} and adapt tone accordingly.
+Sophie should never mention a discount to a premium lead. Ever.
+
+Add to Lead model: enrichmentData Json?, leadTier String @default("standard")
+Migrate via Supabase MCP.
+
+---
+
+### SPRINT 10E — LTV Feedback Loop + POS Integration (BUILD BEFORE SPRINT 11)
+
+This is the most commercially important build. Optimise for actual revenue, not just leads.
+
+Create src/lib/services/posIntegrationService.ts
+
+**Supported POS systems (aesthetics-specific):**
+- Zenoti (most common UK aesthetics)
+- Phorest
+- Mindbody
+- Manual webhook (for clinics without these systems)
+
+**The flow:**
+1. When a client is onboarded, agency owner connects their POS via OAuth or API key in the brief settings
+2. When a patient completes a transaction in the POS, it fires a webhook to POST /api/webhooks/pos/[blueprintId]
+3. The webhook receives: { patientEmail, transactionValue, treatmentType, date }
+4. Match to Lead by email → update Lead.actualTransactionValue and Lead.ltv
+5. Send the conversion value back to Meta via Conversions API (CAPI):
+   - Event: Purchase
+   - Value: actual transaction value
+   - Currency: GBP
+   - hashed email (SHA256, required by Meta)
+6. This forces Meta's algorithm to optimise for high-value buyers, not just any leads
+
+**The impact:**
+After 50+ conversions with real transaction values flowing back to Meta, the algorithm finds more £3,500 patients instead of £150 ones. CPL may stay the same but revenue per lead increases dramatically.
+
+**Schema additions:**
+Add to Lead: actualTransactionValue Float?, ltv Float? (lifetime value accumulates)
+Add to CampaignBlueprint: posProvider String?, posApiKey String? (encrypted), metaPixelId String?, metaAccessToken String?
+
+New route: POST /api/webhooks/pos/[blueprintId] — receives POS events, matches leads, fires CAPI
+
+Migrate via Supabase MCP.
+
+---
+
+### SPRINT 10F — Cross-Tenant Vector Knowledge Graph (BUILD BEFORE SPRINT 11)
+
+The real moat. When a hook drops CPL 30% for one client, extract the psychological pattern and deploy it to all clients in that vertical before breakfast.
+
+Create src/lib/services/vectorKnowledgeService.ts
+
+**The architecture:**
+Use OpenAI text-embedding-3-small to create vector embeddings of winning creative patterns.
+
+When a creative achieves 30%+ CPL reduction sustained over 7 days:
+1. Extract the psychological framework (NOT the specific words — the structural pattern)
+   - What awareness state does it address?
+   - What primary emotion does it trigger?
+   - What objection does it pre-empt?
+   - What proof mechanism does it use?
+2. Strip all PII and client-specific identifiers
+3. Generate a vector embedding of the psychological framework
+4. Store in VectorKnowledge table with vertical tag
+
+Every night at 02:00 (add to nightly cron):
+1. For each LIVE blueprint, query VectorKnowledge for top patterns in their vertical
+2. GPT-4o adapts the winning psychological framework to this client's specific offer and location
+3. Adds the adapted creative brief to the client's creative queue
+4. Logs: "Adopted winning hook structure from [vertical] network — adapted for [location]"
+
+Schema:
+model VectorKnowledge {
+  id                String   @id @default(cuid())
+  vertical          String
+  psychPattern      String   -- plain English description of the psychological framework
+  embedding         Bytes    -- vector embedding
+  cplReduction      Float    -- % reduction that triggered extraction
+  sourceCity        String?  -- anonymised
+  deployedCount     Int      @default(0)
+  createdAt         DateTime @default(now())
+  @@index([vertical])
+}
+
+Add to vercel.json: { "path": "/api/cron/vector-knowledge", "schedule": "0 2 * * *" }
+
+This is the compound intelligence loop. Every winning pattern across every client makes every other client better. A human agency cannot do this manually across 40 accounts. Your system does it while you sleep.
+
+---
+
 ### SPRINT 11 — Volume Pricing in Stripe
 - 1-5 clients: £500/mo, 6-10: £400/mo, 11-20: £350/mo, 21+: £300/mo
 - Platform fee £97/mo always
