@@ -530,6 +530,11 @@ export interface MetaBreakdownRow {
   ctr:                number;
   leads:              number;
   cpl:                number;           // spend / leads (0 when no leads)
+  // Pro media-buyer signals (Sprint 10B). 0 when Meta omits the field.
+  frequency:          number;           // avg impressions per person — fatigue signal
+  reach:              number;           // unique people reached — saturation signal
+  cpm:                number;           // cost per 1k impressions
+  cpc:                number;           // cost per click
   age?:               string;
   gender?:            string;
   publisherPlatform?: string;
@@ -540,6 +545,10 @@ interface RawInsightRow {
   impressions?:        string;
   clicks?:             string;
   ctr?:                string;
+  frequency?:          string;
+  reach?:              string;
+  cpm?:                string;
+  cpc?:                string;
   actions?:            Array<{ action_type: string; value: string }>;
   adset_id?:           string;
   adset_name?:         string;
@@ -565,6 +574,10 @@ function parseInsightRow(row: RawInsightRow, level: MetaBreakdownRow["level"]): 
     name: row.ad_name ?? row.adset_name ?? null,
     spend, impressions, clicks, ctr, leads,
     cpl: leads > 0 ? spend / leads : 0,
+    frequency: Number.parseFloat(row.frequency ?? "0") || 0,
+    reach:     Number.parseInt(row.reach ?? "0", 10) || 0,
+    cpm:       Number.parseFloat(row.cpm ?? "0") || 0,
+    cpc:       Number.parseFloat(row.cpc ?? "0") || 0,
     ...(row.age != null ? { age: row.age } : {}),
     ...(row.gender != null ? { gender: row.gender } : {}),
     ...(row.publisher_platform != null ? { publisherPlatform: row.publisher_platform } : {}),
@@ -579,7 +592,7 @@ async function fetchInsightRows(
 ): Promise<RawInsightRow[]> {
   const { accessToken } = await getTenantMetaIds(tenantId);
   const fields = [
-    "spend", "impressions", "clicks", "ctr", "actions",
+    "spend", "impressions", "clicks", "ctr", "frequency", "reach", "cpm", "cpc", "actions",
     ...(opts.level === "adset" ? ["adset_id", "adset_name"] : []),
     ...(opts.level === "ad"    ? ["ad_id", "ad_name"] : []),
   ].join(",");
@@ -607,7 +620,7 @@ export async function getCampaignInsightsSummary(
   const rows = await fetchInsightRows(campaignId, tenantId, dateRange, { label: "getCampaignInsightsSummary" });
   return rows[0]
     ? parseInsightRow(rows[0], "campaign")
-    : { level: "campaign", id: campaignId, name: null, spend: 0, impressions: 0, clicks: 0, ctr: 0, leads: 0, cpl: 0 };
+    : { level: "campaign", id: campaignId, name: null, spend: 0, impressions: 0, clicks: 0, ctr: 0, leads: 0, cpl: 0, frequency: 0, reach: 0, cpm: 0, cpc: 0 };
 }
 
 /** Per-ad-set performance for a campaign. */

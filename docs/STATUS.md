@@ -23,6 +23,22 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 10B — Pro media-buyer intelligence (2026-05-31):**
+- `metaAdsService` insights now also pull `frequency`, `reach`, `cpm`, `cpc` (added
+  to the fields list + `RawInsightRow` + `MetaBreakdownRow` + parse + the empty-row
+  fallback). All breakdown levels carry them.
+- `mediaBuyer.proSignals(campaign, ads)` — pre-computes pro heuristics BEFORE GPT:
+  creative fatigue (freq ≥2.5 warn / ≥3.0 replace), per-ad fatigue (named, >500 impr),
+  audience-overlap risk (>5 ads/ad sets). Surfaced as a "PRO SIGNALS" evidence block.
+- GPT system prompt upgraded to the 30-yr-expert ruleset (learning phase, frequency,
+  CPM saturation, 7-day attribution, overlap, hook-vs-CTR, external factors) and now
+  refuses to SCALE when frequency ≥2.5, preferring CREATIVE_REFRESH at ≥3.0.
+- **Honest scope (deferred, documented):** `effective_status`/`learning_stage_info`
+  and hourly budget-pacing (`time_increment=1`) + `action_attribution_windows`
+  aren't fetched yet — they need extra Meta calls/params and a live Meta connection
+  to validate the response shapes; the frequency/CPM/overlap intelligence (the bulk
+  of the value) is in. Runtime-unverified (blocked on Meta approval). tsc 0.
+
 **Sprint 12 — White label fully applied (2026-05-31):**
 - **Fixed a real white-label LEAK**: appointment reminder SMS hard-coded
   "Aurum Growth" as `{{BUSINESS_NAME}}` — the client's own lead received the

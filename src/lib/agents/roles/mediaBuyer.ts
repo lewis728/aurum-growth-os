@@ -91,9 +91,39 @@ function summariseRows(label: string, rows: MetaBreakdownRow[], keyOf: (r: MetaB
   if (!rows.length) return `${label}: (no data)`;
   const lines = rows
     .slice(0, 8)
-    .map((r) => `  ${keyOf(r)}: spend £${r.spend.toFixed(0)}, ${r.leads} leads, CPL £${r.cpl.toFixed(2)}, CTR ${r.ctr.toFixed(2)}%`)
+    .map((r) => `  ${keyOf(r)}: spend £${r.spend.toFixed(0)}, ${r.leads} leads, CPL £${r.cpl.toFixed(2)}, CTR ${r.ctr.toFixed(2)}%, freq ${r.frequency.toFixed(1)}, CPM £${r.cpm.toFixed(2)}`)
     .join("\n");
   return `${label}:\n${lines}`;
+}
+
+/**
+ * Pro-media-buyer heuristic flags (Sprint 10B) computed BEFORE GPT, so the
+ * diagnosis is grounded in concrete fatigue/saturation signals rather than the
+ * model inferring them. Surfaced into the evidence pack.
+ */
+function proSignals(campaign: MetaBreakdownRow, ads: MetaBreakdownRow[]): string[] {
+  const flags: string[] = [];
+  // Creative fatigue: frequency thresholds at the campaign level.
+  if (campaign.frequency >= 3.0) {
+    flags.push(`Campaign frequency ${campaign.frequency.toFixed(1)} ≥ 3.0 — audience over-exposed; creative needs replacing now.`);
+  } else if (campaign.frequency >= 2.5) {
+    flags.push(`Campaign frequency ${campaign.frequency.toFixed(1)} ≥ 2.5 — early creative fatigue; line up a refresh.`);
+  }
+  // Per-ad fatigue — name the worst offenders.
+  for (const ad of ads) {
+    if (ad.frequency >= 3.0 && ad.impressions > 500) {
+      flags.push(`Ad "${ad.name ?? ad.id}" frequency ${ad.frequency.toFixed(1)} — pause/replace this creative.`);
+    }
+  }
+  // Audience-overlap risk: too many ad sets running at once.
+  const activeAdsets = ads.length; // ad-level rows ≈ active creatives; coarse proxy
+  if (adsetOverlapRisk(activeAdsets)) {
+    flags.push(`${activeAdsets} ads/ad sets running — audience-overlap risk; consider consolidating rather than multiplying.`);
+  }
+  return flags;
+}
+function adsetOverlapRisk(count: number): boolean {
+  return count > 5;
 }
 
 export async function runMediaBuyerCycle(
@@ -158,6 +188,7 @@ export async function runMediaBuyerCycle(
     const audience = audienceR.status === "fulfilled" ? audienceR.value : { demographics: [], placements: [] };
 
     // ── STEP 2 — DIAGNOSE (GPT-4o causal reasoning) ───────────────────────────
+    const proFlags = proSignals(campaign, ads);
     const evidence = [
       `CLIENT: ${blueprint.businessName} (${blueprint.vertical})`,
       `Current daily budget: £${currentDailyGbp.toFixed(2)}`,
@@ -165,11 +196,12 @@ export async function runMediaBuyerCycle(
       ``,
       ctx.promptBlock, // includes the brief + Kai's nightly distilledLearnings
       ``,
-      `CAMPAIGN (last ${OBSERVE_DAYS}d): spend £${campaign.spend.toFixed(0)}, ${campaign.leads} leads, CPL £${campaign.cpl.toFixed(2)}, CTR ${campaign.ctr.toFixed(2)}%, ${campaign.impressions} impressions`,
+      `CAMPAIGN (last ${OBSERVE_DAYS}d): spend £${campaign.spend.toFixed(0)}, ${campaign.leads} leads, CPL £${campaign.cpl.toFixed(2)}, CTR ${campaign.ctr.toFixed(2)}%, freq ${campaign.frequency.toFixed(1)}, reach ${campaign.reach}, CPM £${campaign.cpm.toFixed(2)}, ${campaign.impressions} impressions`,
       summariseRows("AD SETS", adsets, (r) => r.name ?? r.id ?? "adset"),
       summariseRows("ADS / CREATIVES", ads, (r) => r.name ?? r.id ?? "ad"),
       summariseRows("AUDIENCE — demographics", audience.demographics, (r) => `${r.age ?? "?"}/${r.gender ?? "?"}`),
       summariseRows("AUDIENCE — placements", audience.placements, (r) => r.publisherPlatform ?? "?"),
+      proFlags.length ? `PRO SIGNALS (heuristic, pre-computed):\n${proFlags.map((f) => `  • ${f}`).join("\n")}` : "PRO SIGNALS: none firing.",
     ].join("\n");
 
     let diagnosis: Diagnosis | null = null;
@@ -184,16 +216,24 @@ export async function runMediaBuyerCycle(
             {
               role: "system",
               content:
-                "You are a media buyer with 30 years of Meta advertising experience, managing one " +
-                "client's campaign. Diagnose WHY performance is what it is — be specific and back every " +
-                "statement with the data given. Then choose exactly ONE action. Respect the client's brief, " +
-                "compliance notes, and what we've learned about this client. " +
+                "You are a Meta ads expert with 30 years of experience, managing one client's campaign. " +
+                "Diagnose WHY performance is what it is — be specific and back every statement with the data. " +
+                "What you know as a pro:\n" +
+                "- Never touch a campaign/ad set in the LEARNING phase (it needs ~50 conversions to exit); explain why if you hold.\n" +
+                "- Frequency above 2.5 = creative fatigue; above 3.0 = pause/replace the creative immediately.\n" +
+                "- CPM rising week-on-week on the same audience = audience saturation.\n" +
+                "- 7-day attribution is more reliable than 1-day for high-ticket services — don't over-react to one day.\n" +
+                "- Audience overlap between many ad sets wastes budget — consolidate, don't multiply (flag if >5 ad sets).\n" +
+                "- Strong hook but low CTR = body-copy problem; weak hook = the opening isn't stopping the scroll.\n" +
+                "- Always consider whether underperformance is a campaign issue vs external (seasonality, competitor surge).\n" +
+                "Use the PRO SIGNALS block (pre-computed fatigue/overlap flags) as ground truth. " +
+                "Then choose exactly ONE action. Respect the client's brief, compliance notes, and learnings. " +
                 'Respond ONLY as JSON: {"diagnosis": string, "action": string, "actionType": ' +
                 '"PAUSE_CAMPAIGN"|"SCALE_BUDGET"|"RECOMMEND_CREATIVE_REFRESH"|"FLAG_LOW_CTR"|"NO_ACTION", ' +
                 '"expectedOutcome": string, "watchFor": string, "confidence": number (0-1)}. ' +
-                "Use PAUSE_CAMPAIGN only if performance is genuinely bad (e.g. CPL far above benchmark with " +
-                "real spend and few leads). Use SCALE_BUDGET only if performance is genuinely strong (CPL " +
-                "well below benchmark with volume). Prefer NO_ACTION over a low-confidence guess.",
+                "PAUSE_CAMPAIGN only if performance is genuinely bad (CPL far above benchmark with real spend, few leads). " +
+                "SCALE_BUDGET only if genuinely strong (CPL well below benchmark with volume) AND frequency is healthy (<2.5). " +
+                "If frequency ≥3.0, prefer RECOMMEND_CREATIVE_REFRESH over scaling. Prefer NO_ACTION over a low-confidence guess.",
             },
             { role: "user", content: `${evidence}\n\nDiagnose and decide now.` },
           ],
