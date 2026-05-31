@@ -17,6 +17,7 @@ export interface BuildInput {
   businessName: string;
   cleanName?:   string;
   location?:    string;
+  vertical?:    string;
   website?:     string;
   treatments?:  string;
   websiteText?: string;
@@ -56,6 +57,7 @@ export async function buildSequence(input: BuildInput): Promise<BuiltSequence> {
       businessName: input.businessName,
       cleanName:    input.cleanName,
       location:     input.location,
+      vertical:     input.vertical,
       treatments:   input.treatments,
       website:      input.website,
       websiteText:  input.websiteText,

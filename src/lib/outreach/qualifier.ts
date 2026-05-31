@@ -52,26 +52,37 @@ export async function qualifyProspect(input: QualifyInput): Promise<QualifyResul
 
   const vertical = input.vertical || "aesthetics";
   const system =
-    `You are a strict B2B lead qualifier for a marketing agency that only takes ` +
-    `established local ${vertical} businesses with high-ticket services. You are ` +
-    `sceptical and concise. Output STRICT JSON only.`;
+    `You are a strict B2B lead qualifier for a marketing agency. The agency can ` +
+    `deliver for almost any local service business, so fit is NOT about the industry — ` +
+    `it's about whether cold outreach + paid ads would actually GROW this specific ` +
+    `business. You are sceptical and concise. Output STRICT JSON only.`;
 
   const user = [
-    `Assess whether this business is a good fit to be a marketing-agency client.`,
+    `Decide if ${input.companyName} is a good-fit prospect for cold outreach.`,
     ``,
     `Business: ${input.companyName}${input.location ? ` (${input.location})` : ""}`,
-    `Vertical: ${vertical}`,
+    `Vertical (context only, not a filter): ${vertical}`,
     ``,
     input.websiteText
       ? `Scraped website text:\n${input.websiteText}`
-      : `No website text could be retrieved — judge conservatively from the name/vertical and lower the score for lack of evidence.`,
+      : `No website text could be retrieved — judge conservatively and lower the score for lack of evidence.`,
     ``,
-    `Criteria:`,
-    `1. Do they offer high-ticket services (typical transaction value > $150)?`,
-    `2. Are they an ESTABLISHED local business — not a single-person freelancer, and not a massive untouchable enterprise/franchise HQ?`,
+    `Score against THREE fit signals (this is the ICP):`,
+    `1. ROOM TO GROW — an established business with capacity to take on more customers ` +
+      `(multiple staff / real premises / a proper service offering), NOT a maxed-out solo ` +
+      `freelancer and NOT a massive untouchable enterprise or franchise HQ.`,
+    `2. HIGH-TICKET / GOOD LTV — each new customer is worth enough (roughly £150+ per job, ` +
+      `or strong repeat value) that booked consultations clearly move their revenue.`,
+    `3. UNDER-MARKETED — they are NOT already advertising well (little or no obvious paid ` +
+      `ads presence / weak funnel). This is the gap the agency fills; an obvious gap is a STRONG positive.`,
     ``,
-    `Return JSON exactly: {"qualified": boolean, "reasons": string (1-2 sentences), "fit_score": number 0-100}.`,
-    `Be strict: only score 75+ if BOTH criteria are clearly met.`,
+    `Weighting: all three matter. A business that can grow, sells high-ticket, and isn't ` +
+    `advertising is the ideal (score 85-100). Missing one drops it toward 70-80. Missing two ` +
+    `or clearly unsuitable (solo/maxed-out/enterprise/free or trivial service) scores below 50.`,
+    ``,
+    `Return JSON exactly: {"qualified": boolean, "reasons": string (1-2 sentences naming which ` +
+    `signals hit/missed), "fit_score": number 0-100}. Only set qualified=true and score 75+ when ` +
+    `signals 1 and 2 are clearly met.`,
   ].join("\n");
 
   try {

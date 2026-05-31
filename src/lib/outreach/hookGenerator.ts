@@ -32,12 +32,33 @@ export interface HookInput {
   businessName: string;
   cleanName?:   string;
   location?:    string;
+  vertical?:    string;
   treatments?:  string;
   website?:     string;
   websiteText?: string;
   hasAds?:      boolean;
   reviewCount?: number;
   reviewRating?: number;
+}
+
+// Maps a vertical key to a natural noun for the hook prompt. Unknown verticals
+// fall back to a safe generic, so the engine works for ANY ICP, not just clinics.
+const VERTICAL_NOUNS: Record<string, string> = {
+  aesthetics:      "aesthetics clinic",
+  dental:          "dental practice",
+  cosmetic_surgery: "cosmetic surgery clinic",
+  hair_transplant: "hair transplant clinic",
+  roofing:         "roofing company",
+  hvac:            "HVAC company",
+  real_estate:    "estate agency",
+  legal:           "law firm",
+  personal_injury: "personal injury firm",
+  financial_services: "financial services firm",
+};
+
+function verticalNoun(vertical?: string): string {
+  const key = (vertical ?? "").toLowerCase().trim();
+  return VERTICAL_NOUNS[key] ?? "local business";
 }
 
 export interface HookResult {
@@ -80,9 +101,12 @@ async function writeHook(input: HookInput, critique?: string): Promise<string> {
     `casual, specific, lowercase-friendly, never salesy. You observe ONE concrete, real ` +
     `detail about the business. Output ONLY the single sentence, no quotes, no preamble.`;
 
+  // Describe the business by its vertical, not a hardcoded "aesthetics clinic",
+  // so the same engine writes natural hooks for any ICP (clinic, roofer, dentist…).
+  const businessNoun = verticalNoun(input.vertical);
   const user = [
     `Write a single personalised opening line for a cold email to ${name}, ` +
-      `a${input.location ? ` ${input.location}` : ""} ${(input.treatments ? "aesthetics clinic" : "aesthetics clinic")}.`,
+      `a${input.location ? ` ${input.location}` : ""} ${businessNoun}.`,
     ``,
     contextBlock(input),
     ``,

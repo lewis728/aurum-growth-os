@@ -80,6 +80,7 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       businessName: p.companyName,
       cleanName,
       location:     p.location ?? undefined,
+      vertical:     p.vertical,
       website:      p.website,
       websiteText,
       variantIndex: input.variantIndex,
