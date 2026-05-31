@@ -431,3 +431,26 @@ model AIRepresentative {
   @@index([tenantId])
   @@index([blueprintId])
 }
+
+// ── ClientMessage ─────────────────────────────────────────────────────────────
+// Inbound/outbound messages between the agency's CLIENT and the Communicator role
+// (Sprint 9). direction: inbound (from client) | outbound (agent reply).
+// requiresApproval=true holds an agent reply for owner sign-off before sending.
+model ClientMessage {
+  id               String    @id @default(cuid())
+  blueprintId      String
+  tenantId         String
+  direction        String    // "inbound" | "outbound"
+  channel          String    @default("dashboard") // dashboard | whatsapp | sms | email
+  intent           String?   // question | instruction | complaint | praise | request
+  content          String    @db.Text
+  agentResponse    String?   @db.Text // drafted/sent reply text (for inbound rows)
+  requiresApproval Boolean   @default(false)
+  approvedAt       DateTime?
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([blueprintId])
+  @@index([tenantId, requiresApproval])
+}

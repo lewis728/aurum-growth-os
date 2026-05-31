@@ -46,6 +46,7 @@ interface OverviewResponse {
   briefing: { text: string; generatedAt: string } | null;
   flagged:  FlaggedClient[];
   clients:  PortfolioRow[];
+  pendingApprovals: number; // client messages awaiting the owner's sign-off (Sprint 9)
 }
 
 const EMPTY: OverviewResponse = {
@@ -53,6 +54,7 @@ const EMPTY: OverviewResponse = {
   briefing: null,
   flagged:  [],
   clients:  [],
+  pendingApprovals: 0,
 };
 
 function startOfToday(): Date {
@@ -206,6 +208,9 @@ export async function GET(): Promise<NextResponse> {
         : null,
       flagged,
       clients,
+      pendingApprovals: await prisma.clientMessage.count({
+        where: { tenantId, requiresApproval: true },
+      }).catch(() => 0),
     };
 
     return NextResponse.json(response);

@@ -33,6 +33,7 @@ interface Overview {
   briefing: { text: string; generatedAt: string } | null;
   flagged:  FlaggedClient[];
   clients:  PortfolioRow[];
+  pendingApprovals: number;
 }
 
 const mono = "var(--font-mono, 'JetBrains Mono', monospace)";
@@ -62,6 +63,7 @@ export function GodModeDashboard() {
   const clients  = data?.clients  ?? [];
   const flagged  = data?.flagged  ?? [];
   const briefing = data?.briefing ?? null;
+  const pendingApprovals = data?.pendingApprovals ?? 0;
 
   const kpis = [
     { label: "Leads today",        value: String(top.leadsToday) },
@@ -121,6 +123,23 @@ export function GodModeDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Pending client-message approvals (Sprint 9) */}
+        {pendingApprovals > 0 && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px",
+            background: "var(--surface-1, #0a0a0a)", border: "1px solid rgba(201,168,76,0.4)",
+            borderRadius: "8px", padding: "14px 16px",
+          }}>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--gold, #C9A84C)" }} />
+            <span style={{ fontSize: "14px", color: "var(--text-1, #fff)" }}>
+              <strong style={{ fontFamily: mono }}>{pendingApprovals}</strong> client {pendingApprovals === 1 ? "reply is" : "replies are"} awaiting your approval
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: "12px", color: "var(--text-3, #52525b)" }}>
+              open a client to review
+            </span>
+          </div>
+        )}
 
         {/* Flagged clients */}
         {flagged.length > 0 && (

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { CreativePanel } from "@/components/dashboard/CreativePanel";
 import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
 import { PipelineBoard, type PipelineLead } from "@/components/dashboard/PipelineBoard";
+import { ClientMessages } from "@/components/dashboard/ClientMessages";
 
 interface AgentAction {
   id:         string;
@@ -415,6 +416,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
         </div>
         <PipelineBoard leads={leads as unknown as PipelineLead[]} />
       </div>
+
+      {/* Client messages (Sprint 9) — Communicator agent thread + approvals. */}
+      <ClientMessages blueprintId={clientId} />
 
       {/* Legacy recent-leads table — retained, hidden (false &&) as a fallback ref. */}
       {false && (

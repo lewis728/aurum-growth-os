@@ -23,6 +23,28 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 9 — Client Communication Agent (2026-05-31):**
+- Migration (prod via Supabase MCP): new `ClientMessage` model {id, blueprintId,
+  tenantId, direction, channel, intent, content, agentResponse, requiresApproval,
+  approvedAt, sentAt, createdAt} + indexes incl. `(tenantId, requiresApproval)`.
+- `src/lib/agents/roles/communicator.ts` — `handleClientMessage(...)`: records the
+  inbound msg first (never lost), GPT-4o classifies intent + drafts a reply from
+  REAL data (leads today / booked this week / last action), then routes:
+  question+praise → auto-send; instruction → hold if an approvalThreshold is set;
+  request → hold; complaint → hold AND fire Slack alert (new CLIENT_COMPLAINT
+  alert type). Never throws (holds for a human on any failure).
+- `GET/POST /api/clients/[blueprintId]/messages` (list + handle inbound) and
+  `POST/DELETE …/messages/[messageId]/approve` (approve+send / dismiss),
+  tenant-scoped, atomic approve via $transaction.
+- UI: `ClientMessages.tsx` thread (intent dots, draft-reply approve/dismiss)
+  mounted in the client sub-account; God Mode shows a **pending-approvals** strip
+  (count of `ClientMessage.requiresApproval=true`).
+- **Honest scope:** "auto-send" + approve currently record the outbound row +
+  surface it in the dashboard thread; actual WhatsApp/SMS delivery is wired in
+  Sprint 10 (`sendWhatsApp`). The message composer posts AS the client (for
+  testing) — a real client inbound channel (webhook) comes with Sprint 10.
+  Runtime-unverified (needs OPENAI live). Pre-sprint Vercel check: 0 errors. tsc 0.
+
 **Sprint 8 — Reporter role (Ava) — COMPLETES THE 5 ROLES (2026-05-31):**
 - `src/lib/agents/roles/reporter.ts` — `runReporterCycle(blueprintId, tenantId)`,
   the 4th role. Reads what every OTHER role did (their AgentActions, via the

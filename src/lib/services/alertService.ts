@@ -32,6 +32,7 @@ const ALERT_WORTHY_ACTIONS: ReadonlySet<string> = new Set([
   "CALL_FAILURE_SPIKE", // >50% of recent calls failed (raised by the caller role)
   "CPL_CRITICAL",       // CPL exceeded 3x the vertical benchmark
   "LEAD_DROUGHT",       // zero leads for 6h+ in business hours on a live budget
+  "CLIENT_COMPLAINT",   // the agency's client sent a complaint (communicator role)
 ]);
 
 export function isAlertWorthy(actionType: string): boolean {
@@ -60,6 +61,7 @@ const ACTION_EMOJI: Record<string, string> = {
   CALL_FAILURE_SPIKE: "📵",
   CPL_CRITICAL:       "📈",
   LEAD_DROUGHT:       "🏜️",
+  CLIENT_COMPLAINT:   "💢",
 };
 
 /**
