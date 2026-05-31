@@ -146,6 +146,9 @@ export async function queueAppointmentReminders(
       lead: {
         select: { phone: true, firstName: true, lastName: true, tenantId: true },
       },
+      blueprint: {
+        select: { businessName: true },
+      },
     },
   });
 
@@ -166,10 +169,13 @@ export async function queueAppointmentReminders(
 
   const tpl = templates ?? defaultTemplates;
 
+  // White-label: the reminder goes to the CLIENT'S lead, so it must read the
+  // client's own business name — never the platform name.
+  const businessName = appointment.blueprint?.businessName ?? "us";
   const render = (template: string): string =>
     template
       .replace(/\{\{LEAD_NAME\}\}/g, leadName)
-      .replace(/\{\{BUSINESS_NAME\}\}/g, "Aurum Growth");
+      .replace(/\{\{BUSINESS_NAME\}\}/g, businessName);
 
   const confirmationAt = now;
   const dayBeforeAt = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000);

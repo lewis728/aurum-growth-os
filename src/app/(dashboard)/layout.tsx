@@ -14,6 +14,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { getBranding } from "@/lib/services/brandingService";
 import { SubscriptionBanner } from "@/components/access/SubscriptionBanner";
 
 /**
@@ -131,8 +132,21 @@ export default async function DashboardLayout({
     }
   }
 
+  // White-label (Sprint 12): override the gold accent with the agency's primary
+  // colour, dashboard-wide. A later <style> wins over the globals.css :root var.
+  let brandStyle: string | null = null;
+  if (userId) {
+    const tenantId = orgId ?? `pending:${userId}`;
+    const branding = await getBranding(tenantId).catch(() => null);
+    const raw = branding?.primaryColour?.trim().replace(/^#/, "");
+    if (raw && /^[0-9a-fA-F]{6}$/.test(raw)) {
+      brandStyle = `:root{--gold:#${raw};}`;
+    }
+  }
+
   return (
     <div className="min-h-screen bg-black">
+      {brandStyle && <style dangerouslySetInnerHTML={{ __html: brandStyle }} />}
       <SubscriptionBanner />
       {children}
     </div>

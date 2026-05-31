@@ -23,6 +23,25 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 12 — White label fully applied (2026-05-31):**
+- **Fixed a real white-label LEAK**: appointment reminder SMS hard-coded
+  "Aurum Growth" as `{{BUSINESS_NAME}}` — the client's own lead received the
+  platform name. Now uses the client's `blueprint.businessName` (added to the
+  reminder's appointment include).
+- **Landing page** (`/lp/[blueprintId]`) — verified ALREADY white-labelled from an
+  earlier sprint (getBranding → logo + primaryColour accent, footer = client name,
+  no "Aurum"). No change needed. (I briefly overwrote it with a worse version this
+  sprint and reverted it — the existing one is better.)
+- **Dashboard CSS**: the `(dashboard)` layout injects a scoped `<style>` overriding
+  `--gold` with the agency's `primaryColour`, so the whole dashboard re-themes.
+- Already in place from earlier sprints (verified): monthly reports + weekly
+  WhatsApp send under the agency brand via `getBranding`; BrandingConfig edits
+  agencyName/logoUrl/colours/customDomain/fromName/supportEmail/welcome.
+- **Honest scope:** logo is set by URL, not a Supabase Storage file-upload widget
+  (the spec's "upload logo" — deferred; URL works today). SMS sender ID stays the
+  Twilio number (alphanumeric sender = Twilio config/regulatory, not code) — the
+  message BODY is now correctly client-branded. tsc 0. Pre-sprint Vercel: 0 errors.
+
 **Sprint 11 — Volume pricing (2026-05-31):**
 - `stripeService.computeVolumePricing(clientCount)` + `VOLUME_TIERS`: per-client
   price by TOTAL client count (1-5 £500, 6-10 £400, 11-20 £350, 21+ £300), applied
