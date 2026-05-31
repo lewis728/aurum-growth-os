@@ -1,19 +1,45 @@
 "use client";
 
 /**
- * WaitlistForm — marketing-site waitlist capture (Sprint 16).
- * POSTs to /api/waitlist. Premium dark glass; inline success/error states.
+ * WaitlistForm — marketing-site waitlist capture (Sprint 16, premium redesign).
+ * POSTs to /api/waitlist. Dark card, gold accent on focus, animated checkmark on
+ * success. CSS-only motion; no npm packages.
  */
 
 import { useState } from "react";
 
 type State = "idle" | "submitting" | "done" | "error";
 
-const inputStyle = {
-  width: "100%", padding: "12px 14px", fontSize: "14px",
-  background: "var(--surface-2)", border: "1px solid var(--border)",
-  borderRadius: "8px", color: "var(--text-1)", outline: "none",
-} as const;
+// Controlled input with a gold focus ring (inline styles can't do :focus, so we
+// toggle on focus/blur).
+function Field(props: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  type?: string;
+  required?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      type={props.type ?? "text"}
+      value={props.value}
+      placeholder={props.placeholder}
+      required={props.required}
+      onChange={(e) => props.onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        width: "100%", padding: "12px 14px", fontSize: "14px",
+        background: "var(--surface-2)", color: "var(--text-1)",
+        borderRadius: "8px", outline: "none",
+        border: `1px solid ${focused ? "var(--gold)" : "var(--border)"}`,
+        boxShadow: focused ? "0 0 0 3px rgba(201,168,76,0.15)" : "none",
+        transition: "border-color 0.3s ease, box-shadow 0.3s ease",
+      }}
+    />
+  );
+}
 
 export function WaitlistForm() {
   const [name, setName] = useState("");
@@ -47,14 +73,33 @@ export function WaitlistForm() {
       <div
         style={{
           background: "var(--surface-1)", border: "1px solid var(--border-strong)",
-          borderRadius: "12px", padding: "28px", textAlign: "center",
+          borderRadius: "12px", padding: "36px 28px", textAlign: "center",
         }}
       >
-        <div style={{ fontSize: "32px", marginBottom: "8px" }}>✓</div>
-        <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-1)" }}>You&apos;re on the list.</div>
-        <div style={{ fontSize: "13px", color: "var(--text-2)", marginTop: "6px" }}>
-          We&apos;ll be in touch as we open access. Welcome to the future of agency fulfilment.
+        <div className="wl-check" aria-hidden>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path className="wl-check-path" d="M5 13l4 4L19 7" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
+        <div style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-1)" }}>You&apos;re on the list.</div>
+        <div style={{ fontSize: "13px", color: "var(--text-2)", marginTop: "6px" }}>
+          We&apos;ll be in touch.
+        </div>
+        <style>{`
+          .wl-check {
+            width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 999px;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #E8C766, var(--gold));
+            box-shadow: 0 10px 30px -10px var(--gold);
+            animation: wlPop 0.5s cubic-bezier(0.2,0.8,0.2,1.2) both;
+          }
+          .wl-check-path { stroke-dasharray: 30; stroke-dashoffset: 30; animation: wlDraw 0.45s ease 0.22s forwards; }
+          @keyframes wlPop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+          @keyframes wlDraw { to { stroke-dashoffset: 0; } }
+          @media (prefers-reduced-motion: reduce) {
+            .wl-check { animation: none; } .wl-check-path { animation: none; stroke-dashoffset: 0; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -67,10 +112,10 @@ export function WaitlistForm() {
         borderRadius: "12px", padding: "24px", display: "flex", flexDirection: "column", gap: "12px",
       }}
     >
-      <input style={inputStyle} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required />
-      <input style={inputStyle} type="email" placeholder="Work email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      <input style={inputStyle} placeholder="Agency name" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} />
-      <input style={inputStyle} placeholder="How many clients do you have?" value={clientCount} onChange={(e) => setClientCount(e.target.value)} />
+      <Field value={name} onChange={setName} placeholder="Your name" required />
+      <Field value={email} onChange={setEmail} placeholder="Work email" type="email" required />
+      <Field value={agencyName} onChange={setAgencyName} placeholder="Agency name" />
+      <Field value={clientCount} onChange={setClientCount} placeholder="How many clients do you have?" />
       {state === "error" && (
         <div style={{ fontSize: "12px", color: "#ef4444" }}>{error}</div>
       )}
@@ -78,8 +123,9 @@ export function WaitlistForm() {
         type="submit"
         disabled={state === "submitting"}
         style={{
-          marginTop: "4px", padding: "12px 16px", fontSize: "14px", fontWeight: 600,
-          background: "var(--gold)", color: "#000", border: "none", borderRadius: "8px",
+          marginTop: "4px", padding: "13px 16px", fontSize: "14px", fontWeight: 600,
+          background: "linear-gradient(135deg, #E8C766, var(--gold))", color: "#000",
+          border: "none", borderRadius: "8px",
           cursor: state === "submitting" ? "default" : "pointer", opacity: state === "submitting" ? 0.6 : 1,
         }}
       >
