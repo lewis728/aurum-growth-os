@@ -6,6 +6,7 @@ import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
 import { PipelineBoard, type PipelineLead } from "@/components/dashboard/PipelineBoard";
 import { ClientMessages } from "@/components/dashboard/ClientMessages";
 import { TeamStrip } from "@/components/dashboard/TeamStrip";
+import { TeamActivityFeed } from "@/components/dashboard/TeamActivityFeed";
 
 interface AgentAction {
   id:         string;
@@ -412,6 +413,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
         </div>
         <TeamStrip blueprintId={clientId} />
       </div>
+
+      {/* Unified team activity feed (Sprint 3C) — all roles, chronological. */}
+      <TeamActivityFeed blueprintId={clientId} />
 
       {/* CRM pipeline (Sprint 3B) — leads move automatically by derived stage. */}
       <div>
