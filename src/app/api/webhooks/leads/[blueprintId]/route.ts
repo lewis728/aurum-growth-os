@@ -125,7 +125,7 @@ export async function POST(
   // Awaited (not fire-and-forget) so the call is guaranteed to be placed even
   // on serverless, where post-response work can be killed. Never throws; the
   // service skips non-LIVE blueprints internally.
-  await placeSpeedToLeadCall({
+  await callLead({
     blueprintId: blueprint.id,
     tenantId:    blueprint.tenantId,
     lead,

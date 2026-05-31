@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z }                          from "zod";
 import { auth }                       from "@clerk/nextjs/server";
-import { provisionClientAgent }       from "@/lib/services/agentProvisioning";
+import { deployCaller }               from "@/lib/agents/roles/caller";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Provision ─────────────────────────────────────────────────────────────
   try {
-    const result = await provisionClientAgent(body.blueprintId, tenantId);
+    const result = await deployCaller(body.blueprintId, tenantId);
     return NextResponse.json(
       {
         deployed: true,
