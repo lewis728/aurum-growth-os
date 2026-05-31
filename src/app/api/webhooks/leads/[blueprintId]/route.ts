@@ -12,7 +12,8 @@ import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { triggerAutomations } from "@/lib/services/automationEngine";
-import { placeSpeedToLeadCall, computeLeadScore } from "@/lib/services/speedToLeadService";
+import { computeLeadScore } from "@/lib/services/speedToLeadService";
+import { callLead } from "@/lib/agents/roles/caller";
 import type { CRMLayer } from "@/types/crmLayer";
 
 export const dynamic = "force-dynamic";
