@@ -424,6 +424,11 @@ model AIRepresentative {
   customIntroLine         String?
   customObjectionResponses Json                     @default("{}")
   voiceId                 String?
+  // Per-role agent names for the team view (Sprint 3C). repName is the Caller;
+  // these name the other roles. Null → default (James/Marcus/Ava); Kai is fixed.
+  schedulerName          String?
+  mediaBuyerName         String?
+  reporterName           String?
   lastDeployedAt          DateTime?
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt

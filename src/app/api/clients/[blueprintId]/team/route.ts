@@ -41,7 +41,7 @@ export async function GET(
 
   try {
     const [rep, blueprint, brief, callerA, mediaA, reporterA, lastAppt] = await Promise.all([
-      prisma.aIRepresentative.findUnique({ where: { blueprintId }, select: { repName: true } }),
+      prisma.aIRepresentative.findUnique({ where: { blueprintId }, select: { repName: true, schedulerName: true, mediaBuyerName: true, reporterName: true } }),
       prisma.campaignBlueprint.findFirst({ where: { id: blueprintId, tenantId }, select: { lastBriefingText: true, lastBriefingAt: true } }),
       prisma.clientBrief.findUnique({ where: { blueprintId }, select: { learningsUpdatedAt: true } }),
       prisma.agentAction.findFirst({ where: { blueprintId, tenantId, actionType: { in: CALLER_ACTIONS } }, orderBy: { executedAt: "desc" }, select: { reasoning: true, executedAt: true } }),
@@ -50,7 +50,10 @@ export async function GET(
       prisma.appointment.findFirst({ where: { blueprintId, tenantId }, orderBy: { createdAt: "desc" }, select: { createdAt: true, scheduledAt: true } }),
     ]);
 
-    const callerName = rep?.repName ?? "Sophie";
+    const callerName    = rep?.repName ?? "Sophie";
+    const schedulerName = rep?.schedulerName ?? "James";
+    const mediaBuyerName = rep?.mediaBuyerName ?? "Marcus";
+    const reporterName  = rep?.reporterName ?? "Ava";
 
     // Reporter: prefer the most recent of briefing vs risk/milestone action.
     let reporterAction: string | null = null;
@@ -67,17 +70,17 @@ export async function GET(
         lastActiveAt: callerA?.executedAt.toISOString() ?? null,
       },
       {
-        role: "scheduler", roleLabel: "The Scheduler", agentName: "James",
+        role: "scheduler", roleLabel: "The Scheduler", agentName: schedulerName,
         lastAction: lastAppt ? "Booked an appointment and set up reminders." : null,
         lastActiveAt: lastAppt?.createdAt.toISOString() ?? null,
       },
       {
-        role: "mediaBuyer", roleLabel: "The Media Buyer", agentName: "Marcus",
+        role: "mediaBuyer", roleLabel: "The Media Buyer", agentName: mediaBuyerName,
         lastAction: mediaA?.reasoning ?? null,
         lastActiveAt: mediaA?.executedAt.toISOString() ?? null,
       },
       {
-        role: "reporter", roleLabel: "The Reporter", agentName: "Ava",
+        role: "reporter", roleLabel: "The Reporter", agentName: reporterName,
         lastAction: reporterAction,
         lastActiveAt: reporterAt?.toISOString() ?? null,
       },
