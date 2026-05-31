@@ -143,6 +143,12 @@ model Lead {
   pipelineStage   String   @default("new") // new|called|qualified|booked|showed|converted (+ sub: no_answer|no_show|not_interested|retry_queue). Derived from status+appointment; persisted for indexed aggregates.
   convertedAt     DateTime? // set when the agency owner marks the lead converted
   dealValue       Float?    // actual deal value at conversion (overrides est. avg client value)
+  // ── LTV feedback loop (Sprint 10E) ──────────────────────────────────────────
+  actualTransactionValue Float? // value from the client's POS for this lead's first purchase
+  ltv                    Float? // accumulated lifetime value across POS transactions
+  // ── Lead fingerprinting (Sprint 10D) ────────────────────────────────────────
+  enrichmentData  Json?    // EnrichmentData — tier signals + any external data
+  leadTier        String   @default("standard") // standard | premium (drives call frame)
   // ── Conversation FSM + phantom call-back loop (Sprint 10C) ──────────────────
   conversationState String @default("INITIAL") // INITIAL|QUALIFYING|OBJECTION_HANDLING|NEGOTIATING|BOOKING|CONFIRMED|DORMANT|REENGAGED
   lastContactAt     DateTime? // last outbound touch (call/SMS) — drives re-engagement timing
@@ -462,6 +468,23 @@ model ClientMessage {
   @@index([tenantId])
   @@index([blueprintId])
   @@index([tenantId, requiresApproval])
+}
+
+// ── VectorKnowledge ───────────────────────────────────────────────────────────
+// Cross-tenant winning-creative patterns (Sprint 10F). The `embedding vector(1536)`
+// column is managed via raw SQL (pgvector) — Prisma has no native vector type, so
+// it is intentionally NOT declared here; reads/writes of the embedding use
+// $queryRaw/$executeRaw. The scalar fields below are the Prisma-managed surface.
+model VectorKnowledge {
+  id            String   @id @default(cuid())
+  vertical      String
+  psychPattern  String   @db.Text
+  cplReduction  Float    // % reduction that triggered extraction
+  sourceCity    String?  // anonymised
+  deployedCount Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([vertical])
 }
 
 // ── CreativeSimulation ────────────────────────────────────────────────────────

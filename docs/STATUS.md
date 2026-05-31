@@ -23,6 +23,58 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 10F — Cross-tenant vector knowledge graph (2026-05-31):**
+- **pgvector 0.8.0 ENABLED** in prod (Supabase MCP); `VectorKnowledge` table with
+  a real `embedding vector(1536)` column + vertical index. Prisma model declares
+  the scalar fields only (no native vector type) — the embedding is read/written
+  via `$queryRaw`/`$executeRaw`.
+- `vectorKnowledgeService`: `extractAndStorePattern` embeds a winning psychological
+  pattern (OpenAI text-embedding-3-small), **deduplicates by cosine distance** (<0.15
+  bumps deployedCount instead of inserting), inserts with the vector via raw SQL;
+  `topPatternsForVertical`; `adaptPatternsForClient` — GPT-4o adapts the best vertical
+  pattern to a client's offer+location and logs `CREATIVE_PATTERN_ADOPTED` to the
+  creative queue. All NEVER THROW.
+- Cron `/api/cron/vector-knowledge` `0 2 * * *` (now 9 crons) — nightly adapts
+  patterns for every live client.
+- **Honest scope:** the extraction TRIGGER ("30% CPL drop sustained 7 days") needs
+  real Meta performance data — blocked on Meta approval — so `extractAndStorePattern`
+  is callable but nothing auto-feeds it yet; the nightly adaptation runs over
+  whatever patterns exist (none until extraction fires). Embedding-less fallback
+  insert if OpenAI is down. Runtime-unverified. tsc 0.
+
+**Sprint 10E — LTV feedback loop + POS integration (2026-05-31):**
+- Migration (prod via Supabase MCP): `Lead.actualTransactionValue`, `Lead.ltv`;
+  `CampaignBlueprint.posProvider/posApiKey/metaPixelId/metaAccessToken`.
+- `posIntegrationService.recordPosTransaction(blueprintId, tenantId, event)` —
+  matches the lead by email, accumulates `ltv`, then fires a Meta **CAPI** Purchase
+  event (SHA256-hashed email, real GBP value) so Meta optimises for high-VALUE
+  buyers. CAPI creds resolved from the blueprint overrides (encrypted) else the
+  tenant `MetaConnection`. NEVER THROWS.
+- `POST /api/webhooks/pos/[blueprintId]` — HMAC-signed (blueprint `posApiKey`,
+  AES-decrypted) or CRON_SECRET-bearer; matches + records + fires CAPI; always 200.
+- **Graceful shell (per decision):** the LTV recording works today; CAPI **no-ops**
+  without a Meta pixel+token (Meta approval pending). Real Zenoti/Phorest/Mindbody
+  adapters aren't built — the webhook accepts the documented event shape (and a
+  manual webhook), which is the integration point those POSes post to. POS OAuth
+  connect UI in brief settings deferred. Runtime-unverified. tsc 0.
+
+**Sprint 10D — Lead fingerprinting & personalised handoff (2026-05-31):**
+- Migration (prod via Supabase MCP): `Lead.enrichmentData` (Json), `leadTier`
+  (default standard).
+- `leadEnrichmentService.enrichLead(leadId, tenantId)` — computes tier from LOCAL
+  instant signals: corporate vs free email domain (business-owner signal) + UK
+  postcode in formData. External enrichment (Hunter.io/Clearbit) behind a single
+  `externalEnrich` seam that **no-ops without an API key** (graceful shell — runs
+  today, upgrades when a key is added). Never throws. Premium = corporate domain.
+- `callFrameForTier` injects `lead_tier` + `tier_frame` into Sophie's Retell
+  dynamic variables — **premium leads NEVER hear discount language**.
+- Wired: leads webhook calls `enrichLead` before the 60s call; speedToLead reads
+  the tier and adds the frame to the call.
+- env: `HUNTER_API_KEY`/`CLEARBIT_API_KEY` documented (optional).
+- **Honest scope:** real third-party enrichment + ONS postcode→income scoring are
+  the seam's future upgrade (no keys/data wired); the domain/postcode tiering +
+  premium framing work now. tsc 0.
+
 **Sprint 10C-B — Pre-flight creative simulation (2026-05-31):**
 - Migration (prod via Supabase MCP): `CreativeSimulation` table {personaScores,
   meanScore, passed, blockedReason}.

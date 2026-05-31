@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { triggerAutomations } from "@/lib/services/automationEngine";
 import { computeLeadScore } from "@/lib/services/speedToLeadService";
 import { callLead } from "@/lib/agents/roles/caller";
+import { enrichLead } from "@/lib/services/leadEnrichmentService";
 import type { CRMLayer } from "@/types/crmLayer";
 
 export const dynamic = "force-dynamic";
@@ -121,6 +122,11 @@ export async function POST(
     console.error("[leads webhook] DB error:", msg);
     return NextResponse.json({ error: "Failed to create lead" }, { status: 500 });
   }
+
+  // ── Lead fingerprinting (Sprint 10D) ─────────────────────────────────────
+  // Enrich + tier the lead BEFORE the call so Sophie's script adapts (premium →
+  // exclusivity frame, never discounts). Fast on the local-only path; never throws.
+  await enrichLead(lead.id, lead.tenantId);
 
   // ── Speed-to-lead: Sophie calls within 60 seconds ────────────────────────
   // Awaited (not fire-and-forget) so the call is guaranteed to be placed even

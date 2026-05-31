@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { createPhoneCall, toE164 } from "@/lib/services/retellService";
 import { buildClientContext } from "@/lib/agents/clientContext";
+import { callFrameForTier, type LeadTier } from "@/lib/services/leadEnrichmentService";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 // Retell dynamic variables must all be strings. Renders the brief's
@@ -149,6 +150,13 @@ export async function placeSpeedToLeadCall(opts: {
     const context = await buildClientContext(blueprintId);
     const brief   = context.brief;
 
+    // Lead tier (Sprint 10D) — adapt the call frame (premium → exclusivity, never
+    // discounts). Read the tier set by enrichLead at webhook time.
+    const tierRow = await prisma.lead
+      .findUnique({ where: { id: lead.id }, select: { leadTier: true } })
+      .catch(() => null);
+    const frame = callFrameForTier((tierRow?.leadTier as LeadTier) ?? "standard");
+
     const { callId } = await createPhoneCall({
       fromNumber,
       toNumber,
@@ -163,6 +171,8 @@ export async function placeSpeedToLeadCall(opts: {
         ideal_customer_profile: brief?.idealCustomerProfile ?? "",
         qualification_questions: brief?.qualificationQuestions ?? "",
         objection_responses:    renderObjectionsForCall(brief?.objectionResponses),
+        lead_tier:              frame.lead_tier,
+        tier_frame:             frame.tier_frame,
       },
     });
 
