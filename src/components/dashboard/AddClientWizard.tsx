@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { ScrapeResult } from "@/app/api/clients/scrape-website/route";
 
@@ -87,6 +88,7 @@ function Err({ msg }: { msg?: string }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AddClientWizard({ onClose, onSuccess }: Props) {
+  const router = useRouter();
   const [mode,       setMode]       = useState<"new" | "takeover" | null>(null);
   const [step,       setStep]       = useState(0);
   const [data,       setData]       = useState<WizardData>({
@@ -196,6 +198,8 @@ export default function AddClientWizard({ onClose, onSuccess }: Props) {
       const result = (await res.json()) as { blueprintId: string; agentName: string };
       onSuccess(result.agentName, data.businessName);
       onClose();
+      // Straight into briefing the agent — the most important moment after deploy.
+      router.push(`/onboard/${result.blueprintId}`);
     } catch {
       setErrors({ submit: "Something went wrong. Please try again." });
     } finally {
