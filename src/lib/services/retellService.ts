@@ -280,3 +280,21 @@ export async function updateRetellLlmPrompt(llmId: string, generalPrompt: string
     { maxAttempts: 3, baseDelayMs: 500, label: "retellService.updateRetellLlmPrompt" }
   );
 }
+
+/**
+ * Fetches a Retell LLM's current general_prompt. GET /get-retell-llm/{llm_id}.
+ * Used to verify what prompt an agent is actually running. Returns null on error.
+ */
+export async function getRetellLlmPrompt(llmId: string): Promise<string | null> {
+  const apiKey = getRetellApiKey();
+  try {
+    const res = await fetch(`${RETELL_BASE_URL}/get-retell-llm/${llmId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { general_prompt?: string };
+    return data.general_prompt ?? null;
+  } catch {
+    return null;
+  }
+}
