@@ -664,4 +664,12 @@ Build to that standard. Nothing less.
 ---
 
 ## Questions from Claude Code
-[NONE]
+
+Q: 10D/10E need paid external APIs. How should I build them?
+A: Option 1 — Build graceful shells. 
+
+For leadEnrichmentService: corporate domain detection and UK postcode → ONS income data work without paid APIs. Build those now. Add Hunter/Clearbit as optional enrichment — if CLEARBIT_API_KEY or HUNTER_API_KEY env vars are set, use them. If not, skip silently and use domain/postcode signals only. Never block the call.
+
+For posIntegrationService: build the full webhook receiver and Meta CAPI integration now. It no-ops gracefully if posApiKey is not set on the blueprint. The webhook endpoint exists and is ready — clinics just need to be pointed at it. Meta CAPI fires if META_PIXEL_ID and META_ACCESS_TOKEN are set on the blueprint, skipped if not.
+
+Build everything properly. The infrastructure is there from day one. The paid APIs activate when the agency owner connects them — not before.
