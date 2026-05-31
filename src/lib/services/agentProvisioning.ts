@@ -28,8 +28,7 @@ import {
   updateRetellLlmPrompt,
   resolveRetellVoiceId,
 } from "@/lib/services/retellService";
-import { assembleRetellPromptAsync } from "@/lib/services/retellPromptAssembler";
-import { renderBriefBlock } from "@/lib/agents/clientContext";
+import { assembleVoicePromptFromBrief } from "@/lib/services/retellPromptAssembler";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 export interface ProvisionResult {
@@ -64,7 +63,7 @@ function buildBlueprintForAssembler(row: {
   targetLocation: string;
   voice:          unknown;
   crm:            unknown;
-}): Parameters<typeof assembleRetellPromptAsync>[0] {
+}): Parameters<typeof assembleVoicePromptFromBrief>[0]["blueprint"] {
   return {
     blueprintId:    row.id,
     serviceIntent:  row.vertical,
@@ -72,7 +71,7 @@ function buildBlueprintForAssembler(row: {
     targetLocation: row.targetLocation,
     voiceLayer:     row.voice ?? {},
     crmLayer:       row.crm ?? {},
-  } as unknown as Parameters<typeof assembleRetellPromptAsync>[0];
+  } as unknown as Parameters<typeof assembleVoicePromptFromBrief>[0]["blueprint"];
 }
 
 async function persistAgentToBlueprint(
@@ -120,11 +119,9 @@ export async function provisionClientAgent(
   if (!rep)          throw new Error(`No representative configured for blueprint ${blueprintId}`);
   if (rep.tenantId !== tenantId) throw new Error("Representative does not belong to this tenant");
 
-  // ── Build the brief-aware system prompt ────────────────────────────────────
+  // ── Build the brief-aware, GPT-generated system prompt ─────────────────────
   const blueprint    = buildBlueprintForAssembler(blueprintRow);
-  const basePrompt   = await assembleRetellPromptAsync(blueprint, rep);
-  const briefBlock   = renderBriefBlock(brief);
-  const systemPrompt = `${basePrompt}\n\n${briefBlock}`.trim();
+  const systemPrompt = await assembleVoicePromptFromBrief({ blueprint, representative: rep, brief });
 
   const webhookUrl     = `${appBaseUrl()}/api/webhooks/calls/${blueprintId}`;
   const resolvedVoice  = resolveRetellVoiceId(rep.voiceId);

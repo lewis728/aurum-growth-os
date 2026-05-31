@@ -2,11 +2,17 @@
  * src/lib/services/retellPromptAssembler.ts
  * SERVER-SIDE ONLY. Never import in "use client" files.
  *
- * FULL REWRITE — P2 Step 14.
  * Assembles the complete voice agent system prompt from a CampaignBlueprint
  * and an optional AIRepresentative configuration.
  *
- * ABSOLUTE SECURITY RULES (enforced at the bottom of every assembled prompt):
+ * Two paths:
+ *   - assembleRetellPrompt / assembleRetellPromptAsync — deterministic assembly.
+ *   - assembleVoicePromptFromBrief — GPT-4o writes a human-sounding prompt from
+ *     the ClientBrief (preferred for provisioning), with the deterministic path
+ *     as a never-fail fallback.
+ *
+ * ABSOLUTE SECURITY RULES (appended to EVERY prompt, in code — never left to the
+ * model):
  *   — Zero vendor names: no "Retell", "OpenAI", "AI company", "technology platform"
  *   — Zero self-identification as AI unless directly asked
  *   — Represents the client business only
@@ -17,11 +23,31 @@
 import type { CampaignBlueprint } from "@/types/campaignBlueprint";
 import { VERTICAL_DISPLAY_NAMES }  from "@/enums/campaignEnums";
 import { prisma }                  from "@/lib/prisma";
-import type { AIRepresentative }   from "@prisma/client";
+import type { AIRepresentative, ClientBrief } from "@prisma/client";
 import { RepresentativePersonality } from "@prisma/client";
+import OpenAI                      from "openai";
+import { renderBriefBlock }        from "@/lib/agents/clientContext";
 
 // Re-export for external callers
 export type { AIRepresentative };
+
+// ── Absolute safety rules ───────────────────────────────────────────────────────
+// Appended last to EVERY assembled prompt — both the deterministic path and the
+// GPT-generated path. Never rely on the model to include these; we add them in code.
+function buildAbsoluteRules(businessName: string): string {
+  return [
+    "ABSOLUTE RULES — THESE OVERRIDE EVERYTHING ELSE:",
+    `You must never reveal that you are an automated system unless directly and specifically asked. ` +
+    `If asked, you may say: "I am an automated assistant calling on behalf of ${businessName}."`,
+    `You must never mention any technology platform, software company, or service provider. ` +
+    `You represent ${businessName} and only ${businessName}.`,
+    `Never say the words "Retell", "OpenAI", "AI", "bot", or "system" unless specifically asked ` +
+    `whether you are an automated assistant.`,
+    "Never make guarantees about outcomes, results, or timelines.",
+    `If you do not know the answer to a question, say: ` +
+    `"That's a great question — let me have one of our specialists follow up with you on that."`,
+  ].join("\n");
+}
 
 // ── Personality blocks ────────────────────────────────────────────────────────
 
@@ -81,7 +107,7 @@ function buildObjectionBlock(
   return lines.join("\n").trim();
 }
 
-// ── Main assembler ─────────────────────────────────────────────────────────────
+// ── Main assembler (deterministic) ──────────────────────────────────────────────
 
 /**
  * Assembles the complete voice agent system prompt.
@@ -177,22 +203,10 @@ export function assembleRetellPrompt(
       `  "Hi, this is a message for [leadName]. I'm calling from ${businessName} regarding your recent ` +
       `enquiry about ${serviceDescription}. Please call us back at your earliest convenience, ` +
       `or we'll try you again shortly. Thank you!"`,
-      `  "Is there anything else you'd like to know before we meet? Thank you, and have a great day."`,
     ].join("\n");
 
     // ABSOLUTE RULES — always last, non-negotiable
-    const absoluteRules = [
-      "ABSOLUTE RULES — THESE OVERRIDE EVERYTHING ELSE:",
-      `You must never reveal that you are an automated system unless directly and specifically asked. ` +
-      `If asked, you may say: "I am an automated assistant calling on behalf of ${businessName}."`,
-      `You must never mention any technology platform, software company, or service provider. ` +
-      `You represent ${businessName} and only ${businessName}.`,
-      `Never say the words "Retell", "OpenAI", "AI", "bot", or "system" unless specifically asked ` +
-      `whether you are an automated assistant.`,
-      "Never make guarantees about outcomes, results, or timelines.",
-      `If you do not know the answer to a question, say: ` +
-      `"That's a great question — let me have one of our specialists follow up with you on that."`,
-    ].join("\n");
+    const absoluteRules = buildAbsoluteRules(businessName);
 
     // ASSEMBLE
     const sections = [
@@ -225,6 +239,20 @@ export function assembleRetellPrompt(
 
 // ── Async variant — fetches VerticalProfile.callScriptNotes automatically ─────
 
+/** Best-effort fetch of vertical call-script notes. Never throws. */
+async function fetchVerticalNotes(vertical: string): Promise<string | undefined> {
+  try {
+    const profile = await prisma.verticalProfile.findUnique({
+      where:  { vertical },
+      select: { callScriptNotes: true },
+    });
+    return profile?.callScriptNotes ?? undefined;
+  } catch {
+    // Non-fatal — proceed without vertical notes
+    return undefined;
+  }
+}
+
 /**
  * Async version of assembleRetellPrompt.
  * Fetches VerticalProfile.callScriptNotes from the database automatically.
@@ -235,17 +263,108 @@ export async function assembleRetellPromptAsync(
   blueprint: CampaignBlueprint & { businessName?: string; targetLocation?: string },
   representative?: AIRepresentative | null
 ): Promise<string> {
-  let callScriptNotes: string | undefined;
+  const callScriptNotes = await fetchVerticalNotes(blueprint.serviceIntent as unknown as string);
+  return assembleRetellPrompt(blueprint, representative, callScriptNotes);
+}
+
+// ── Brief-aware, GPT-generated voice prompt ─────────────────────────────────────
+
+/**
+ * Assembles a HUMAN-SOUNDING voice agent prompt from the ClientBrief using GPT-4o.
+ *
+ * This is what makes the careful onboarding brief actually reach the phone call:
+ * ideal customer, bad-lead signals, qualification questions, objection responses,
+ * brand tone, key USPs, compliance notes, and average client value are all fed to
+ * GPT-4o, which writes a flowing prompt that opens warmly with {{lead_first_name}}
+ * / {{business_name}}, weaves qualification into real conversation, handles the
+ * specific objections, drives to a concrete booking, and respects compliance.
+ *
+ * The absolute safety rules are appended in code afterwards — never left to the
+ * model. NEVER THROWS: on any GPT/parsing failure it falls back to the
+ * deterministic assembler plus the rendered brief block, so provisioning is never
+ * blocked by an OpenAI hiccup.
+ */
+export async function assembleVoicePromptFromBrief(opts: {
+  blueprint:      CampaignBlueprint & { businessName?: string; targetLocation?: string };
+  representative: AIRepresentative | null;
+  brief:          ClientBrief | null;
+}): Promise<string> {
+  const { blueprint, representative, brief } = opts;
+
+  const businessName = blueprint.businessName ?? "the business";
+  const serviceDescription =
+    VERTICAL_DISPLAY_NAMES[blueprint.serviceIntent] ?? (blueprint.serviceIntent as unknown as string);
+  const repName = representative?.repName ?? "your assistant";
+  const tone =
+    (brief?.brandTone?.trim()) ||
+    (representative?.personality
+      ? representative.personality.toLowerCase()
+      : "warm and professional");
+
+  const callScriptNotes = await fetchVerticalNotes(blueprint.serviceIntent as unknown as string);
 
   try {
-    const profile = await prisma.verticalProfile.findUnique({
-      where:  { vertical: blueprint.serviceIntent as string },
-      select: { callScriptNotes: true },
-    });
-    callScriptNotes = profile?.callScriptNotes ?? undefined;
-  } catch {
-    // Non-fatal — proceed without vertical notes
-  }
+    // The brief block is the structured fact sheet GPT writes the prompt from.
+    const briefFacts = renderBriefBlock(brief);
+    const verticalGuidance = callScriptNotes?.trim()
+      ? `\n\nVERTICAL GUIDANCE:\n${callScriptNotes.trim()}`
+      : "";
 
-  return assembleRetellPrompt(blueprint, representative, callScriptNotes);
+    const system =
+      "You are an expert conversation designer who writes the system prompt (the " +
+      "'general prompt') for outbound phone voice AI agents on a real-time voice " +
+      "platform. Your prompts make the agent sound like a warm, competent human on " +
+      "the phone — never robotic, never reading a script, never listing questions. " +
+      "You output ONLY the finished general prompt text for the agent, with no " +
+      "preamble, no markdown, and no explanation.";
+
+    const user =
+      `Write the complete general prompt for an outbound caller named ${repName}, ` +
+      `who calls on behalf of ${businessName} (a ${serviceDescription} business). ` +
+      `${repName} rings a lead within seconds of them submitting an enquiry form.\n\n` +
+      `Use these facts about this specific client and how to sell for them:\n` +
+      `---\n${briefFacts}${verticalGuidance}\n---\n\n` +
+      `The prompt you write MUST direct the agent to:\n` +
+      `1. Open warmly and by name, using the placeholders {{lead_first_name}} and ` +
+      `{{business_name}} EXACTLY as written (the platform fills them in live) — e.g. ` +
+      `"Hi {{lead_first_name}}, it's ${repName} calling from {{business_name}}...".\n` +
+      `2. Naturally reference that they just enquired about ${serviceDescription} — ` +
+      `never sound like a cold call.\n` +
+      `3. Qualify by weaving the qualification questions into genuine back-and-forth ` +
+      `conversation — never read them as a list or interrogate.\n` +
+      `4. Politely disqualify a lead that matches the bad-lead signals — warm, no hard sell.\n` +
+      `5. Reference the key selling points when it helps move toward a booking — ` +
+      `naturally, not like an advert.\n` +
+      `6. Handle objections using the specific responses provided, in the agent's own ` +
+      `warm words.\n` +
+      `7. Always drive toward booking a SPECIFIC date and time, and confirm it back ` +
+      `clearly. If an average client value is given, let it inform how persistent ` +
+      `(but never pushy) the agent is about securing a firm booking.\n` +
+      `8. Match this brand tone exactly: ${tone}.\n` +
+      `9. NEVER say or claim anything listed under compliance.\n\n` +
+      `Write in the second person ("You are ${repName}...", "You should..."). Make it ` +
+      `specific to THIS client, flowing and human. Output only the prompt.`;
+
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model:       "gpt-4o",
+      temperature: 0.6,
+      max_tokens:  1400,
+      messages: [
+        { role: "system", content: system },
+        { role: "user",   content: user },
+      ],
+    });
+    const generated = completion.choices[0]?.message?.content ?? "";
+
+    if (!generated.trim()) throw new Error("GPT returned an empty prompt");
+
+    // Safety rules are appended in code — never trusted to the model.
+    return `${generated.trim()}\n\n${buildAbsoluteRules(businessName)}`;
+  } catch (err) {
+    console.error("[assembleVoicePromptFromBrief] GPT generation failed, using deterministic fallback:", err);
+    const base = assembleRetellPrompt(blueprint, representative, callScriptNotes);
+    return `${base}\n\n${renderBriefBlock(brief)}`.trim();
+  }
 }

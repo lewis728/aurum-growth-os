@@ -1,22 +1,22 @@
 /**
  * src/app/api/webhooks/calls/[blueprintId]/route.ts
  * POST /api/webhooks/calls/:blueprintId
- * PUBLIC — No Clerk auth required. Called by Retell voice AI.
+ * PUBLIC — No Clerk auth required. Called by Retell voice AI after a call.
  *
- * - Validates HMAC signature via x-retell-signature header (sha256=)
- * - Extracts custom_analysis_data from post-call payload
- * - Creates Appointment + updates Lead status atomically if booked
- * - Queues appointment reminders non-blocking
- * - Returns 200 within 3 seconds
+ * Thin transport edge: verify the HMAC signature, parse, and delegate ALL
+ * post-call logic to the SCHEDULER role (src/lib/agents/roles/scheduler.ts).
+ * The Caller hands off to the Scheduler purely through this webhook — DB-only,
+ * no direct call between roles.
+ *
+ * Processing is AWAITED before responding: on Vercel serverless the function is
+ * frozen once the response returns, so deferred work would silently never run.
+ * handleCallOutcome never throws and returns fast (a few DB writes + one SMS +
+ * a GPT objection extraction) — well within Retell's timeout.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
-import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioService";
-import { extractObjections } from "@/lib/services/objectionService";
-import { createCalendarEvent } from "@/lib/services/calendarService";
-import type { LeadStatus } from "@/types/lead";
+import { handleCallOutcome, type RetellCallAnalysis } from "@/lib/agents/roles/scheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -40,177 +40,30 @@ function validateRetellSignature(rawBody: string, signatureHeader: string): bool
   return crypto.timingSafeEqual(expectedBuf, receivedBuf);
 }
 
-// ── Lead status derivation ────────────────────────────────────────────────────
-function deriveLeadStatus(analysis: {
-  isQualified?:     boolean;
-  appointmentBooked?: boolean;
-  inVoicemail?:     boolean;
-}): LeadStatus {
-  if (analysis.appointmentBooked) return "booked";
-  if (analysis.isQualified)       return "qualified";
-  if (analysis.inVoicemail)       return "no_answer";
-  return "called";
-}
-
 export async function POST(
   req: NextRequest,
-  { params }: { params: { blueprintId: string } }
+  { params }: { params: { blueprintId: string } },
 ): Promise<NextResponse> {
   const { blueprintId } = params;
 
-  // ── 1. Read raw body BEFORE parsing ──────────────────────────────────────────
+  // 1. Read raw body BEFORE parsing (signature is over the exact bytes).
   const rawBody = await req.text();
 
-  // ── 2. Validate HMAC signature ────────────────────────────────────────────────
+  // 2. Validate HMAC signature.
   const signatureHeader = req.headers.get("x-retell-signature") ?? "";
   if (!validateRetellSignature(rawBody, signatureHeader)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  // ── 3. Parse payload ──────────────────────────────────────────────────────────
-  let payload: Record<string, unknown>;
+  // 3. Parse.
+  let payload: RetellCallAnalysis;
   try {
-    payload = JSON.parse(rawBody) as Record<string, unknown>;
+    payload = JSON.parse(rawBody) as RetellCallAnalysis;
   } catch {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const analysis = (payload["custom_analysis_data"] ?? {}) as {
-    isQualified?:        boolean;
-    appointmentBooked?:  boolean;
-    appointmentSlotTime?: string;
-    ptName?:             string;
-    leadPhone?:          string;
-    leadId?:             string;
-  };
-
-  const leadStatus = deriveLeadStatus(analysis);
-
-  // ── 4. Resolve lead identity ──────────────────────────────────────────────────
-  // Primary correlation is the Retell call_id, which the lead webhook persisted
-  // to Lead.retellCallId when it placed the speed-to-lead call. We fall back to
-  // the analysis-supplied leadId, then phone+blueprintId, for resilience.
-  const callId =
-    (typeof payload["call_id"] === "string" ? (payload["call_id"] as string) : null) ??
-    (payload["call"] as { call_id?: string } | undefined)?.call_id ??
-    null;
-  const leadId    = analysis.leadId;
-  const leadPhone = analysis.leadPhone;
-
-  if (!callId && !leadId && !leadPhone) {
-    // No way to identify lead — log and return 200 (don't retry)
-    console.warn("[calls webhook] No call_id, leadId or leadPhone in payload.");
-    return NextResponse.json({ success: true }, { status: 200 });
-  }
-
-  // ── 5. Heavy processing — AWAITED ─────────────────────────────────────────────
-  // Must NOT be deferred (setImmediate): on Vercel serverless the function is
-  // frozen once the response returns, so deferred work silently never runs. We
-  // await the booking/SMS/calendar work before responding. It's fast (a few DB
-  // writes + one SMS + a GPT objection extraction) — well within Retell's timeout.
-  await (async () => {
-    try {
-      // Resolve lead — prefer the reliable Retell call_id correlation, then fall
-      // back to the analysis-supplied identifiers.
-      const select = { id: true, tenantId: true, firstName: true } as const;
-      let lead =
-        callId
-          ? await prisma.lead.findFirst({ where: { retellCallId: callId, blueprintId }, select })
-          : null;
-      if (!lead && leadId) {
-        lead = await prisma.lead.findFirst({ where: { id: leadId }, select });
-      }
-      if (!lead && leadPhone) {
-        lead = await prisma.lead.findFirst({ where: { phone: leadPhone, blueprintId }, select });
-      }
-
-      if (!lead) {
-        console.warn("[calls webhook] Lead not found:", { callId, leadId, leadPhone, blueprintId });
-        return;
-      }
-
-      // Blueprint context for SMS copy (business name + landing page link).
-      const blueprint = await prisma.campaignBlueprint.findUnique({
-        where:  { id: blueprintId },
-        select: { businessName: true, deployment: true },
-      });
-      const businessName = blueprint?.businessName ?? "us";
-      const landingUrl   = (blueprint?.deployment as { websiteUrl?: string } | null)?.websiteUrl ?? null;
-      const leadPhoneForSms = analysis.leadPhone;
-
-      // Best-effort SMS — never blocks lead/appointment persistence.
-      const safeSms = async (body: string) => {
-        if (!leadPhoneForSms) return;
-        try { await sendDirectSMS(leadPhoneForSms, body); }
-        catch (e) { console.error("[calls webhook] post-call SMS failed:", e instanceof Error ? e.message : e); }
-      };
-
-      // Sprint 12: extract objections from the transcript (if any) and persist
-      // them inside callAnalysis. extractObjections never throws.
-      const transcript =
-        (typeof payload["transcript"] === "string" ? (payload["transcript"] as string) : null) ??
-        (payload["call"] as { transcript?: string } | undefined)?.transcript ??
-        "";
-      const objections = transcript ? await extractObjections(transcript) : [];
-      const callAnalysisData = { ...payload, objections } as object;
-
-      // If appointment was booked and slotTime is valid future date
-      if (
-        analysis.appointmentBooked &&
-        analysis.appointmentSlotTime &&
-        new Date(analysis.appointmentSlotTime) > new Date()
-      ) {
-        // Atomic transaction: create Appointment + update Lead status
-        const [appointment] = await prisma.$transaction([
-          prisma.appointment.create({
-            data: {
-              blueprintId,
-              leadId:      lead.id,
-              tenantId:    lead.tenantId,
-              scheduledAt: new Date(analysis.appointmentSlotTime),
-              confirmed:   false,
-              notes:       analysis.ptName ? `Patient: ${analysis.ptName}` : undefined,
-            },
-          }),
-          prisma.lead.update({
-            where: { id: lead.id },
-            data:  { status: "booked", callAnalysis: callAnalysisData },
-          }),
-        ]);
-
-        // Sync the booking into the tenant's connected calendar (Google).
-        // Best-effort: never throws — the appointment is already persisted.
-        await createCalendarEvent(appointment.id);
-
-        // Queue scheduled reminders (confirmation + day-before + hour-before).
-        await queueAppointmentReminders(appointment.id, lead.id);
-
-        // Immediate post-call booked confirmation.
-        const when = new Date(analysis.appointmentSlotTime).toLocaleString("en-GB", {
-          weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-        });
-        await safeSms(
-          `Hi ${lead.firstName}, great speaking with you! Your appointment with ${businessName} is confirmed for ${when}. See you then.`
-        );
-      } else {
-        // Just update lead status
-        await prisma.lead.update({
-          where: { id: lead.id },
-          data:  { status: leadStatus, callAnalysis: callAnalysisData },
-        });
-
-        // Qualified but didn't book — nudge them to self-serve book.
-        if (leadStatus === "qualified") {
-          await safeSms(
-            `Hi ${lead.firstName}, ${businessName} would love to help.` +
-            (landingUrl ? ` Book your free consultation: ${landingUrl}` : " Reply here to book your free consultation.")
-          );
-        }
-      }
-    } catch (err) {
-      console.error("[calls webhook] Processing error:", err instanceof Error ? err.message : err);
-    }
-  })();
-
-  return NextResponse.json({ success: true }, { status: 200 });
+  // 4. Delegate to the Scheduler — it owns everything from here and never throws.
+  const result = await handleCallOutcome(blueprintId, payload);
+  return NextResponse.json(result.body, { status: result.status });
 }
