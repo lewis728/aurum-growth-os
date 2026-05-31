@@ -14,6 +14,7 @@
  */
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
+import { maybeAlertForAction } from "@/lib/services/alertService";
 
 const CHIEF_OF_STAFF_NAME = "Chief of Staff";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -144,16 +145,17 @@ export async function runChiefOfStaffCycle(tenantId: string): Promise<void> {
     }
 
     // ── Persist portfolio-level actions (blueprintId = null) ──────────────────
-    const records: { actionType: string; reasoning: string; outcome: string }[] = [];
+    const records: { actionType: string; reasoning: string; outcome: string; clientName: string }[] = [];
 
     if (analysis.briefing.trim()) {
-      records.push({ actionType: "PORTFOLIO_BRIEFING", reasoning: analysis.briefing.trim(), outcome: "Briefed" });
+      records.push({ actionType: "PORTFOLIO_BRIEFING", reasoning: analysis.briefing.trim(), outcome: "Briefed", clientName: agencyName });
     }
     for (const alert of analysis.alerts) {
       if (!alert || typeof alert.message !== "string" || !alert.message.trim()) continue;
       const type: AlertType = ALERT_TYPES.has(alert.type) ? alert.type : "PORTFOLIO_INSIGHT";
-      const prefix = alert.clientName && alert.clientName !== "portfolio" ? `${alert.clientName}: ` : "";
-      records.push({ actionType: type, reasoning: `${prefix}${alert.message.trim()}`, outcome: "Flagged" });
+      const clientName = alert.clientName && alert.clientName !== "portfolio" ? alert.clientName : "Portfolio";
+      const prefix = clientName !== "Portfolio" ? `${clientName}: ` : "";
+      records.push({ actionType: type, reasoning: `${prefix}${alert.message.trim()}`, outcome: "Flagged", clientName });
     }
 
     if (records.length > 0) {
@@ -167,6 +169,20 @@ export async function runChiefOfStaffCycle(tenantId: string): Promise<void> {
           outcome:     r.outcome,
         })),
       });
+
+      // Human-in-the-loop: escalate alert-worthy portfolio actions (e.g.
+      // CLIENT_AT_RISK) to the owner's Slack. Fire-and-forget; never throws.
+      for (const r of records) {
+        void maybeAlertForAction({
+          tenantId,
+          blueprintId: null,
+          clientName:  r.clientName,
+          agentName:   CHIEF_OF_STAFF_NAME,
+          actionType:  r.actionType,
+          reasoning:   r.reasoning,
+          outcome:     r.outcome,
+        });
+      }
     }
   } catch (err) {
     console.error(`[chiefOfStaff] cycle failed for tenant ${tenantId}:`, err instanceof Error ? err.message : err);

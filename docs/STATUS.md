@@ -23,6 +23,30 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 4 — Slack alerting (2026-05-31):**
+- `src/lib/services/alertService.ts`: `notifySlack(url, alert)` (Block Kit, never
+  throws, 4xx not retried), `sendAgencyAlert(tenantId, alert)` (reads
+  `AgencyProfile.slackWebhookUrl`), `maybeAlertForAction(...)` — the single hook
+  the action loggers call, so alerting is a property of logging an alert-worthy
+  AgentAction.
+- Alert-worthy: CLIENT_AT_RISK, NEEDS_APPROVAL, META_UNAVAILABLE,
+  CALL_FAILURE_SPIKE, CPL_CRITICAL, LEAD_DROUGHT.
+- Wired into live emitters: `agentReasoningService.logAction` (NEEDS_APPROVAL,
+  META_UNAVAILABLE) + `chiefOfStaff` (CLIENT_AT_RISK / portfolio alerts), fire-and-forget.
+- `PATCH/GET /api/agency/notifications` (save/clear webhook + optional live test;
+  GET returns only `slackConfigured`, never the secret) + `/settings/notifications`
+  page with `NotificationsConfig`.
+- **Honest gap:** CALL_FAILURE_SPIKE / CPL_CRITICAL / LEAD_DROUGHT are defined but
+  NOT yet emitted — they need aggregate monitoring + Meta breakdown data from the
+  Sprint 7 media-buyer rebuild. Slack delivery not yet exercised against a real
+  webhook.
+
+**⚠️ Production finding (2026-05-31, Vercel logs):** `/api/cron/reminders` and
+`/api/dashboard/metrics` threw repeated `prisma:error` 500s ~07:37–08:10 then
+stopped (a `200` at 09:02). Looked transient (deploy-window cold Prisma), but
+unconfirmed — re-check the next time the reminders cron runs; if it recurs, it's a
+real bug to fix before Sprint 5.
+
 **Build 1 — Dual Agent Architecture:**
 - `src/lib/agents/clientAgent.ts` — `runClientAgentCycle(blueprintId, tenantId)`,
   per-client account manager; enforces budget hard limit + `NEEDS_APPROVAL` threshold.

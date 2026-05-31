@@ -18,6 +18,7 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { ServiceVertical } from "@/enums/campaignEnums";
 import { getVerticalInsightsSummary, getSeasonalStrength } from "@/lib/services/insightsService";
+import { maybeAlertForAction } from "@/lib/services/alertService";
 import {
   getCampaignInsights,
   pauseCampaign,
@@ -257,6 +258,17 @@ export async function runAgentReasoningCycle(
       data: { tenantId, blueprintId, agentName, ...params },
     });
     console.log(`[agentReasoning] ${blueprintId}: ${params.actionType} — ${params.outcome}`);
+    // Human-in-the-loop: escalate alert-worthy decisions to the owner's Slack.
+    // Fire-and-forget; never blocks or breaks the reasoning cycle.
+    void maybeAlertForAction({
+      tenantId,
+      blueprintId,
+      clientName: blueprint.businessName,
+      agentName,
+      actionType: params.actionType,
+      reasoning:  params.reasoning,
+      outcome:    params.outcome,
+    });
   };
 
   // ── Decision tree (first match wins) ─────────────────────────────────────
