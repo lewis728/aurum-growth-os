@@ -1,33 +1,33 @@
-import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
-  const errors: string[] = [];
-  
-  // Test 1: Prisma connection
-  try {
-    const { prisma } = await import("@/lib/prisma");
-    await prisma.$queryRaw`SELECT 1`;
-    errors.push("Prisma: OK");
-  } catch (e) {
-    errors.push(`Prisma: FAILED - ${String(e).slice(0, 200)}`);
+// TEMP debug: reports which env vars the running deployment can see.
+// Returns booleans + lengths ONLY — never the values. Gated behind CRON_SECRET.
+// Remove after diagnosing the Retell env issue.
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization");
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ ok: true, ts: new Date().toISOString() });
   }
-  
-  // Test 2: Clerk
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const { userId } = await auth();
-    errors.push(`Clerk: OK (userId=${userId ?? "null"})`);
-  } catch (e) {
-    errors.push(`Clerk: FAILED - ${String(e).slice(0, 200)}`);
-  }
-  
-  // Test 3: OpenAI key
-  errors.push(`OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "SET" : "MISSING"}`);
-  errors.push(`DATABASE_URL: ${process.env.DATABASE_URL ? "SET" : "MISSING"}`);
-  errors.push(`CLERK_SECRET_KEY: ${process.env.CLERK_SECRET_KEY ? "SET" : "MISSING"}`);
-  
-  return NextResponse.json({ status: "debug", checks: errors });
+
+  const seen = (k: string) => {
+    const v = process.env[k];
+    return { present: typeof v === "string" && v.length > 0, length: v ? v.length : 0 };
+  };
+
+  return NextResponse.json({
+    ok: true,
+    ts: new Date().toISOString(),
+    env: {
+      RETELL_FROM_NUMBER:    seen("RETELL_FROM_NUMBER"),
+      RETELL_API_KEY:        seen("RETELL_API_KEY"),
+      RETELL_AGENT_ID:       seen("RETELL_AGENT_ID"),
+      RETELL_WEBHOOK_SECRET: seen("RETELL_WEBHOOK_SECRET"),
+      LEAD_WEBHOOK_SECRET:   seen("LEAD_WEBHOOK_SECRET"),
+      TWILIO_FROM_NUMBER:    seen("TWILIO_FROM_NUMBER"),
+      TWILIO_ACCOUNT_SID:    seen("TWILIO_ACCOUNT_SID"),
+    },
+  });
 }
