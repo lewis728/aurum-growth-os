@@ -321,6 +321,93 @@ After building: tsc clean, commit, push, then continue to Sprint 11.
 
 ---
 
+### SPRINT 3D — Editable SMS Templates + Call Scripts In-App (BUILD NEXT)
+
+Agency owners must be able to edit all communication templates directly in the dashboard and save them. Changes go live immediately for all future leads. No code changes ever needed.
+
+**What's editable:**
+
+1. SMS Templates (per client):
+   - Post-call booked confirmation
+   - Post-call qualified follow-up
+   - Day-before reminder
+   - Hour-before reminder  
+   - No-show follow-up
+   - 7-day re-engagement sequence (3 messages)
+   - Phantom callback at 23 minutes
+
+2. Call Script (per client):
+   - Sophie's opening line
+   - Qualification questions (add/remove/reorder)
+   - Objection responses (add/remove/edit)
+   - Closing/booking language
+   - Voicemail script
+
+3. WhatsApp Templates (per client):
+   - Weekly Monday update template
+   - Milestone message templates
+
+**How it works technically:**
+
+All templates stored in ClientBrief as structured JSON fields:
+- ClientBrief.smsTemplates: Json — { bookedConfirmation, qualifiedFollowUp, dayBefore, hourBefore, noShow, reengagement: string[], phantomCallback }
+- ClientBrief.callScriptOverrides: Json — { openingLine, closingLine, voicemail } (qualification/objections already in ClientBrief)
+- ClientBrief.whatsappTemplates: Json — { weeklyUpdate, milestoneMessage }
+
+**The UI — Template Editor in client sub-account:**
+
+New tab: "Templates" in the client sub-account sidebar.
+
+Shows all templates grouped by category:
+- SMS Sequences
+- Call Script  
+- WhatsApp
+
+Each template is an editable textarea with:
+- Variable hints shown below: {{lead_first_name}}, {{business_name}}, {{appointment_time}}, {{agent_name}}
+- Character count (SMS limit 160 chars)
+- Preview button — shows rendered example with dummy data
+- Save button — saves to ClientBrief immediately via PUT /api/clients/[blueprintId]/brief
+- Reset to default button — restores the vertical default
+
+**Default templates pre-populated by vertical:**
+
+When a client is created, populate ClientBrief.smsTemplates with vertical-specific defaults:
+
+Aesthetics defaults:
+- bookedConfirmation: "Hi {{lead_first_name}}, lovely speaking with you! Your complimentary consultation at {{business_name}} is confirmed for {{appointment_time}}. We look forward to seeing you ✨"
+- dayBefore: "Hi {{lead_first_name}}, just a reminder your consultation at {{business_name}} is tomorrow at {{appointment_time}}. Reply CONFIRM to confirm or CANCEL to reschedule."
+
+Roofing defaults:
+- bookedConfirmation: "Hi {{lead_first_name}}, great speaking with you! Your free roof survey with {{business_name}} is booked for {{appointment_time}}. Our surveyor will be with you then."
+
+Personal injury defaults:
+- bookedConfirmation: "Hi {{lead_first_name}}, thank you for speaking with us. Your free consultation with {{business_name}} is confirmed for {{appointment_time}}. Our team will be in touch shortly."
+
+20 verticals — generate appropriate defaults for each.
+
+**How templates flow into the system:**
+
+- twilioService reads ClientBrief.smsTemplates for this blueprintId before sending any SMS
+- speedToLeadService reads ClientBrief.callScriptOverrides before building the Retell dynamic variables
+- The template variables ({{lead_first_name}} etc) are interpolated at send time with real lead data
+- If a template field is empty — fall back to the vertical default from VerticalProfile
+
+**The call script editor:**
+
+Shows Sophie's current call script (from AIRepresentative.systemPrompt) in a textarea.
+Agency owner can edit it directly.
+On save: calls PUT /api/representative/[blueprintId]/script which:
+1. Saves the new script to AIRepresentative.systemPrompt
+2. Immediately calls updateRetellLlmPrompt to push it live to Retell
+3. Returns confirmation: "Sophie's script updated and live"
+
+Changes to the call script are live on the next call — no redeploy needed.
+
+After building: tsc clean, commit, push. This is a core product feature — agency owners need this from day one.
+
+---
+
 ### SPRINT 10C — Phantom Call-Back Loop + FSM Conversation States
 
 **The Phantom Call-Back Loop:**
