@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { getSubscriptionStatus, isPlatformActive } from "@/lib/services/stripeService";
 
 export const dynamic = "force-dynamic";
 
@@ -57,16 +56,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "agentName is required" }, { status: 400 });
   }
 
-  // Gate: once the 14-day trial ends (past_due / canceled / expired trial), a
-  // live payment method is required before deploying further clients. Tenants
-  // with no subscription row yet are in onboarding grace and allowed through.
-  const subscription = await getSubscriptionStatus(tenantId);
-  if (!isPlatformActive(subscription)) {
-    return NextResponse.json(
-      { error: "Please add a payment method to continue." },
-      { status: 402 }
-    );
-  }
+  // TEMP: disabled for solo test env — restore before opening to paying customers.
+  // (Was: 402 unless getSubscriptionStatus → isPlatformActive passed.)
 
   const dailyBudgetUsd = (body.dailyBudgetGbp ?? 50) * GBP_TO_USD;
 

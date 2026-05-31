@@ -78,78 +78,11 @@ export async function getSubscriptionState(
  * Enforces the trial seat cap of 3 at the API level.
  * Never throws — returns { allowed: false, state: 'none' } on any error.
  */
-export async function canLaunchCampaign(tenantId: string): Promise<AccessResult> {
-  try {
-    const sub = await prisma.agencySubscription.findUnique({
-      where: { tenantId },
-    });
-
-    // STATE 1: No subscription
-    if (!sub) {
-      return {
-        allowed: false,
-        state: "none",
-        reason: "No active subscription. Start your free trial to launch your first client campaign.",
-      };
-    }
-
-    // STATE 4: Past due or canceled
-    if (sub.status === "past_due" || sub.status === "canceled") {
-      return {
-        allowed: false,
-        state: "past_due",
-        reason:
-          "Your account has a payment issue. Please update your payment method to continue launching campaigns.",
-      };
-    }
-
-    // STATE 2: Trialing — enforce 3-seat cap
-    if (sub.status === "trialing") {
-      const activeSeatCount = await prisma.campaignBlueprint.count({
-        where: {
-          tenantId,
-          status: { notIn: INACTIVE_STATUSES },
-        },
-      });
-
-      const trialEndsAt = sub.trialEndsAt ?? undefined;
-
-      if (activeSeatCount >= TRIAL_SEAT_CAP) {
-        return {
-          allowed: false,
-          state: "trialing",
-          reason:
-            "You have reached the trial limit of 3 clients. Subscribe to add unlimited clients.",
-          seatCount: activeSeatCount,
-          trialEndsAt,
-        };
-      }
-
-      return {
-        allowed: true,
-        state: "trialing",
-        seatCount: activeSeatCount,
-        trialEndsAt,
-      };
-    }
-
-    // STATE 3: Active — no restrictions
-    if (sub.status === "active") {
-      return {
-        allowed: true,
-        state: "active",
-      };
-    }
-
-    // Unknown status — treat as no subscription
-    return {
-      allowed: false,
-      state: "none",
-      reason: "No active subscription. Start your free trial to launch your first client campaign.",
-    };
-  } catch {
-    return { allowed: false, state: "none" };
-  }
+export async function canLaunchCampaign(_tenantId: string): Promise<AccessResult> {
+  // TEMP: disabled for solo test env — restore before opening to paying customers.
+  // Original logic (no-subscription / past_due / trial 3-seat cap / active) is in
+  // git history; restore it here when Stripe billing is set up.
+  return { allowed: true, state: "active" };
 }
 
 // ─── canAccessDashboard ───────────────────────────────────────────────────────

@@ -270,14 +270,10 @@ export function computeMonthlyTotal(starterSeats: number, fullServiceSeats: numb
  * - trialing → true until trialEndsAt passes.
  * - past_due / canceled → false.
  */
-export function isPlatformActive(status: SubscriptionStatus | null): boolean {
-  if (!status) return true;
-  if (status.status === "active") return true;
-  if (status.status === "trialing") {
-    if (!status.trialEndsAt) return true;
-    return status.trialEndsAt.getTime() > Date.now();
-  }
-  return false;
+export function isPlatformActive(_status: SubscriptionStatus | null): boolean {
+  // TEMP: disabled for solo test env — restore before opening to paying customers.
+  // Original logic (active, or trialing within trialEndsAt) is in git history.
+  return true;
 }
 
 // ─── createCheckoutSession ────────────────────────────────────────────────────
