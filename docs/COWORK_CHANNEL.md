@@ -321,7 +321,43 @@ After building: tsc clean, commit, push, then continue to Sprint 11.
 
 ---
 
-### SPRINT 10C — Pre-Flight Creative Simulation (BUILD BEFORE SPRINT 11)
+### SPRINT 10C — Phantom Call-Back Loop + FSM Conversation States
+
+**The Phantom Call-Back Loop:**
+In src/lib/agents/roles/scheduler.ts, when a lead goes silent after initial contact:
+
+- At minute 23 after last outbound SMS with no reply: fire a pattern-interrupt message: "Hey {{lead_first_name}}, my system cut out for a second — did you prefer morning or afternoon slots?"
+- At hour 4 with no reply: shift channel — if SMS unanswered, trigger Sophie to call via Retell
+- At hour 24: final nurture SMS: "Still happy to help whenever you're ready, {{lead_first_name}}. The slot is yours if you want it."
+- After 3 attempts with no response: mark lead as DORMANT, add to 7-day re-engagement sequence
+
+This recovers 15-20% of leads that standard systems write off.
+
+**FSM Conversation States:**
+Add explicit state tracking to the Scheduler role. Every lead has a conversationState field:
+
+States: INITIAL → QUALIFYING → OBJECTION_HANDLING → NEGOTIATING → BOOKING → CONFIRMED → DORMANT → REENGAGED
+
+Transitions are deterministic:
+- INITIAL: Sophie calls, lead answers → QUALIFYING
+- QUALIFYING: lead asks price → OBJECTION_HANDLING (price objection flow)
+- QUALIFYING: lead says too busy → OBJECTION_HANDLING (time objection flow)  
+- OBJECTION_HANDLING: objection resolved → NEGOTIATING
+- NEGOTIATING: lead agrees to time → BOOKING
+- BOOKING: slot confirmed → CONFIRMED
+- Any state + no response 24h → DORMANT
+- DORMANT + reply to re-engagement → REENGAGED
+
+Each state has a defined response template. The LLM adapts the tone but the structure is deterministic. This prevents Sophie getting confused by edge cases.
+
+Add to Lead model: conversationState String @default("INITIAL")
+Migrate via Supabase MCP.
+
+After building: tsc clean, commit, push.
+
+---
+
+### SPRINT 10C-B — Pre-Flight Creative Simulation (BUILD BEFORE SPRINT 11)
 
 Before any ad creative is deployed to Meta, it must pass a simulation by 15 LLM consumer personas. No client capital is ever spent on unproven angles.
 
