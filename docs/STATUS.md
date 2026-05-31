@@ -23,6 +23,25 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 5 — ROI reporting + per-client reports (2026-05-31):**
+- `monthlyReportGenerator.ts` (already existed — enhanced, not created):
+  - **Revenue** = booked × `ClientBrief.averageClientValue` (works without Meta);
+    **ROI** = revenue / ad spend (null when spend unknown); per-blueprint + totals.
+  - **Month-on-month trend** via `computeTrend` reading the prior `MonthlyReport`
+    (leads / booked / revenue / CPL deltas; negative CPL delta = cheaper = good).
+  - GPT-4o owner report now leads with the money + trend.
+  - **Per-client white-label reports**: each live client with a `clientContactEmail`
+    gets its own client-facing GPT report emailed under the agency brand via new
+    `emailService.sendClientReport` (no Aurum/vendor names; `replyTo` = agency
+    support email). Isolated per client; never blocks the owner report.
+- Cron aligned to the brief: monthly-report `0 8` → `0 9 1 * *` (9am, 1st).
+- **Honest gaps:** (1) per-client reports are emailed but NOT persisted per-client
+  (the tenant aggregate is persisted; per-client persistence needs a `blueprintId`
+  on MonthlyReport — deferred, noted not silently skipped). (2) Email delivery
+  unexercised — needs RESEND_API_KEY + FROM_EMAIL in prod and a real send.
+  (3) Cron is monthly (1st) so not runtime-verifiable until then; logic is
+  tsc-clean and the revenue/ROI math is unit-reasoned.
+
 **Sprint 4 — Slack alerting (2026-05-31):**
 - `src/lib/services/alertService.ts`: `notifySlack(url, alert)` (Block Kit, never
   throws, 4xx not retried), `sendAgencyAlert(tenantId, alert)` (reads

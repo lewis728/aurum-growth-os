@@ -96,6 +96,55 @@ export async function sendMonthlyReport(
   }
 }
 
+// ── sendClientReport ──────────────────────────────────────────────────────────
+/**
+ * Sends a client-facing monthly report to the agency's CLIENT (not the owner),
+ * fully white-labelled under the agency's brand — zero Aurum mention. Used for the
+ * per-client ROI report. NEVER throws. Does NOT touch MonthlyReport.emailedAt
+ * (that row is the tenant-level aggregate, emailed separately to the owner).
+ *
+ * @param tenantId       agency tenant (for branding lookup + failure logging)
+ * @param reportHtml     client-facing HTML (single campaign, revenue/ROI story)
+ * @param clientEmail    ClientBrief.clientContactEmail
+ * @param businessName   the client's business name (subject line)
+ */
+export async function sendClientReport(
+  tenantId: string,
+  reportHtml: string,
+  clientEmail: string,
+  businessName: string,
+  month: number,
+  year: number
+): Promise<boolean> {
+  try {
+    const branding = await getBranding(tenantId);
+    // White-label: sender is the AGENCY, never the platform. Fall back to a
+    // neutral name (never "Aurum") so a misconfigured agency can't leak our brand
+    // to their client.
+    const fromName  = branding?.fromName ?? branding?.agencyName ?? "Your Marketing Team";
+    const fromEmail = getFromEmail();
+    const replyTo   = branding?.supportEmail ?? undefined;
+    const subject   = `${businessName} — Your ${monthName(month)} ${year} Results`;
+
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from:    `${fromName} <${fromEmail}>`,
+      to:      clientEmail,
+      subject,
+      html:    reportHtml,
+      ...(replyTo ? { replyTo } : {}),
+    });
+
+    if (error) throw new Error(error.message ?? "Resend API error");
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[emailService.sendClientReport] tenantId=${tenantId} ${month}/${year} -> ${clientEmail}: ${message}`);
+    await logFailure(tenantId, "CLIENT_REPORT_EMAIL_FAILED", { tenantId, month, year, clientEmail, error: message });
+    return false;
+  }
+}
+
 // ── sendPaymentFailedAlert ────────────────────────────────────────────────────
 /**
  * Sends a payment-failed transactional alert to the agency owner.
