@@ -47,10 +47,37 @@ white-label branding, team seats/roles.
 - `businessHours` was added then **removed** — it contradicted the core promise
   (Sophie calls 24/7, unconditionally).
 
+## 2a. ✅ Core loop VERIFIED working end-to-end (2026-05-31)
+
+Proven on the live Vercel deployment + production Supabase, against blueprint
+`cmpting4e000004l5gk6hmmz0` ("lewis roofing", agent "bella"), firing at a real phone:
+
+- ✅ **Form → leads webhook → Lead created** (HMAC verified, `200`, lead scored)
+- ✅ **60-second Retell call** — real outbound call placed, `CALL_INITIATED` logged,
+  `retellCallId` persisted, phone rang and the agent spoke
+- ✅ **Post-call webhook → Appointment created** (atomic `$transaction`)
+- ✅ **Lead status → `booked`**
+- ✅ **Confirmation SMS delivered** (Twilio, first live send)
+- ✅ **Reminder queue created** — 3 `ScheduledReminder` rows (confirmation +
+  day-before + hour-before), pre-rendered and addressed
+
+Two real production bugs were found and fixed during this test:
+- **`setImmediate` on serverless** — both webhooks deferred their core work
+  (booking/SMS in calls; automations in leads) until *after* the `200`. Vercel
+  freezes the function once the response is sent, so that work silently never ran.
+  Both now `await` the work before responding (commits `0df6b7c`, `5d783e9`).
+  Without this, no booking or automation would EVER fire in production.
+- **`RETELL_FROM_NUMBER`** was stored with a double `+` (`++447…`) → Retell 404.
+  Corrected to a single `+`.
+
+Test tooling (kept in repo): `npm run fire-lead` (signed lead) and
+`npm run fire-postcall` (signed Retell post-call payload). Admin helper
+`/api/admin/set-blueprint-live` flips a blueprint to LIVE for testing.
+
 ## 3. What is NOT done / known gaps
-- **NOTHING has been verified at runtime.** Verification to date is `tsc --noEmit`
-  only. No call, SMS, GPT response, Stripe action, or realtime subscription has been
-  observed firing. The gap between "compiles" and "works" is the single biggest risk.
+- **Core loop is verified (see §2a); broader runtime coverage is still partial.**
+  Most non-core paths (Meta, Stripe, realtime, reports, crons) have NOT been
+  observed firing — only the form→call→book→SMS loop has. See §6 for the backlog.
 - **Sprint 10 WhatsApp send is NOT implemented** — only `clientContactName` /
   `clientWhatsApp` capture fields exist. `twilioService` has no `sendWhatsApp`; the
   monthly-report cron does not message clients.
