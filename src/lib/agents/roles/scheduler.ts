@@ -140,7 +140,8 @@ export async function handleCallOutcome(
         }),
         prisma.lead.update({
           where: { id: lead.id },
-          data:  { status: "booked", callAnalysis: callAnalysisData },
+          // FSM (Sprint 10C): a booked lead is CONFIRMED.
+          data:  { status: "booked", callAnalysis: callAnalysisData, conversationState: "CONFIRMED", lastContactAt: new Date() },
         }),
       ]);
 

@@ -15,12 +15,93 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendDirectSMS } from "@/lib/services/twilioService";
 import { placeSpeedToLeadCall } from "@/lib/services/speedToLeadService";
+import { isOpenForReengagement, type ConversationState } from "@/lib/crm/conversationState";
 
 export const dynamic = "force-dynamic";
 
 const BATCH_SIZE = 50;
 const RETRY_BATCH = 20;
 const NOSHOW_BATCH = 50;
+const REENGAGE_BATCH = 30;
+
+// ── Sprint 10C: phantom call-back loop ────────────────────────────────────────
+// Recovers leads that went silent after first contact. Staged escalation keyed on
+// reengageAttempts (we have no inbound-SMS channel, so "silent" = still open and
+// no booking since lastContactAt):
+//   attempt 0 → after 23m: pattern-interrupt SMS
+//   attempt 1 → after 4h:  shift channel — Sophie calls again (Retell)
+//   attempt 2 → after 24h: final nurture SMS
+//   attempt 3 → after a further 24h: mark DORMANT (eligible for a future sequence)
+// Every action stamps lastContactAt + increments reengageAttempts so the next
+// stage can't fire early. Best-effort; never throws out of the cron.
+async function processReEngagement(): Promise<number> {
+  const now = Date.now();
+  const min23 = new Date(now - 23 * 60 * 1000);
+  const hr4   = new Date(now - 4 * 60 * 60 * 1000);
+  const hr24  = new Date(now - 24 * 60 * 60 * 1000);
+
+  // Open = not booked/converted and an FSM state still worth nurturing.
+  const OPEN_STATES = ["INITIAL", "QUALIFYING", "OBJECTION_HANDLING", "NEGOTIATING", "BOOKING", "REENGAGED"];
+
+  const leads = await prisma.lead.findMany({
+    where: {
+      conversationState: { in: OPEN_STATES },
+      reengageAttempts:  { lt: 4 },
+      lastContactAt:     { not: null, lte: min23 },
+      status:            { notIn: ["booked", "converted", "no_answer"] },
+    },
+    orderBy: { lastContactAt: "asc" },
+    take:    REENGAGE_BATCH,
+    select:  {
+      id: true, firstName: true, phone: true, blueprintId: true, tenantId: true,
+      reengageAttempts: true, lastContactAt: true, conversationState: true,
+    },
+  });
+
+  let actioned = 0;
+  for (const lead of leads) {
+    if (!lead.lastContactAt) continue;
+    if (!isOpenForReengagement(lead.conversationState as ConversationState)) continue;
+    const last = lead.lastContactAt.getTime();
+    const name = lead.firstName || "there";
+
+    try {
+      if (lead.reengageAttempts === 0 && last <= min23.getTime()) {
+        await sendDirectSMS(lead.phone, `Hey ${name}, my system cut out for a second — did you prefer morning or afternoon slots?`);
+        await bumpReengage(lead.id, 1);
+        actioned++;
+      } else if (lead.reengageAttempts === 1 && last <= hr4.getTime()) {
+        // Shift channel: call again via Retell (never throws).
+        if (lead.blueprintId) {
+          await placeSpeedToLeadCall({
+            blueprintId: lead.blueprintId, tenantId: lead.tenantId,
+            lead: { id: lead.id, firstName: lead.firstName, lastName: "", phone: lead.phone },
+            isRetry: true,
+          });
+        }
+        await bumpReengage(lead.id, 2);
+        actioned++;
+      } else if (lead.reengageAttempts === 2 && last <= hr24.getTime()) {
+        await sendDirectSMS(lead.phone, `Still happy to help whenever you're ready, ${name}. The slot is yours if you want it.`);
+        await bumpReengage(lead.id, 3);
+        actioned++;
+      } else if (lead.reengageAttempts >= 3 && last <= hr24.getTime()) {
+        await prisma.lead.update({ where: { id: lead.id }, data: { conversationState: "DORMANT" } });
+        actioned++;
+      }
+    } catch (e) {
+      console.error("[reminders/reengage] lead failed:", lead.id, e instanceof Error ? e.message : e);
+    }
+  }
+  return actioned;
+}
+
+async function bumpReengage(leadId: string, attempts: number): Promise<void> {
+  await prisma.lead.update({
+    where: { id: leadId },
+    data:  { reengageAttempts: attempts, lastContactAt: new Date() },
+  }).catch(() => { /* non-fatal */ });
+}
 
 // ── Sprint 4: speed-to-lead retry ────────────────────────────────────────────
 // Re-call leads who were called but whose call never produced analysis (no

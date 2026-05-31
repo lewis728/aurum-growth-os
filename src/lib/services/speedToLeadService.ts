@@ -166,7 +166,9 @@ export async function placeSpeedToLeadCall(opts: {
       },
     });
 
-    await prisma.lead.update({ where: { id: lead.id }, data: { retellCallId: callId } });
+    // Stamp lastContactAt so the phantom call-back loop (Sprint 10C) can time
+    // re-engagement from the moment of first contact.
+    await prisma.lead.update({ where: { id: lead.id }, data: { retellCallId: callId, lastContactAt: new Date() } });
     await logAction(
       "CALL_INITIATED",
       isRetry

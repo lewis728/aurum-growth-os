@@ -23,6 +23,22 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 10C — Phantom call-back loop + FSM states (2026-05-31):**
+- Migration (prod via Supabase MCP): `Lead.conversationState` (default INITIAL),
+  `lastContactAt`, `reengageAttempts` + `(tenantId, conversationState)` index.
+- `src/lib/crm/conversationState.ts` — the FSM: INITIAL→QUALIFYING→
+  OBJECTION_HANDLING→NEGOTIATING→BOOKING→CONFIRMED, +DORMANT/REENGAGED. Pure
+  `nextConversationState` + `isOpenForReengagement`. Scheduler sets CONFIRMED on
+  booking, OBJECTION_HANDLING/QUALIFYING on the non-booking path + stamps lastContactAt.
+- **Phantom call-back loop** in the reminders cron (`processReEngagement`): staged
+  escalation keyed on reengageAttempts — 23m pattern-interrupt SMS → 4h shift to a
+  Retell call → 24h final nurture SMS → DORMANT. Stamps lastContactAt each step so
+  stages can't fire early; best-effort, never throws.
+- speedToLead stamps lastContactAt on first contact (the loop's baseline).
+- **Honest scope:** there is no inbound-SMS channel, so "silent" = still-open + no
+  booking since lastContactAt (not a true read-receipt); REENGAGED transition needs
+  an inbound webhook to fire (deferred). Runtime-unverified until the cron runs. tsc 0.
+
 **Sprint 10B — Pro media-buyer intelligence (2026-05-31):**
 - `metaAdsService` insights now also pull `frequency`, `reach`, `cpm`, `cpc` (added
   to the fields list + `RawInsightRow` + `MetaBreakdownRow` + parse + the empty-row

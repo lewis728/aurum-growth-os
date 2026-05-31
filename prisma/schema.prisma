@@ -143,6 +143,10 @@ model Lead {
   pipelineStage   String   @default("new") // new|called|qualified|booked|showed|converted (+ sub: no_answer|no_show|not_interested|retry_queue). Derived from status+appointment; persisted for indexed aggregates.
   convertedAt     DateTime? // set when the agency owner marks the lead converted
   dealValue       Float?    // actual deal value at conversion (overrides est. avg client value)
+  // ── Conversation FSM + phantom call-back loop (Sprint 10C) ──────────────────
+  conversationState String @default("INITIAL") // INITIAL|QUALIFYING|OBJECTION_HANDLING|NEGOTIATING|BOOKING|CONFIRMED|DORMANT|REENGAGED
+  lastContactAt     DateTime? // last outbound touch (call/SMS) — drives re-engagement timing
+  reengageAttempts  Int       @default(0) // phantom call-back attempts made (max 3 → DORMANT)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   blueprint       CampaignBlueprint? @relation(fields: [blueprintId], references: [id])
