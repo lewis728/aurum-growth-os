@@ -26,6 +26,7 @@
 import { prisma } from "@/lib/prisma";
 import { generateMorningBriefing } from "@/lib/services/morningBriefingService";
 import { maybeAlertForAction } from "@/lib/services/alertService";
+import { safeWhatsApp } from "@/lib/services/twilioService";
 
 const REPORTER_NAME = "Ava";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -166,6 +167,27 @@ export async function runReporterCycle(
         },
       });
       result.milestone = milestone;
+
+      // Event-triggered WhatsApp to the client (if a number is on file).
+      const brief = await prisma.clientBrief
+        .findUnique({ where: { blueprintId }, select: { clientWhatsApp: true, clientContactName: true } })
+        .catch(() => null);
+      const wa = brief?.clientWhatsApp?.trim();
+      if (wa) {
+        const name = brief?.clientContactName?.trim() || "there";
+        const sid = await safeWhatsApp(
+          wa,
+          `Hi ${name} — great news: we've now booked ${milestone} appointments for ${businessName}. The campaign's working well and we'll keep it going.`,
+        );
+        if (sid) {
+          await prisma.clientMessage.create({
+            data: {
+              tenantId, blueprintId, direction: "outbound", channel: "whatsapp",
+              intent: "praise", content: `Milestone: ${milestone} bookings`, sentAt: new Date(),
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
     }
   } catch (err) {
     console.error(`[reporter] milestone detection failed for ${blueprintId}:`, err instanceof Error ? err.message : err);

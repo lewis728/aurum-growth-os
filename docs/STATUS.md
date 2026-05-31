@@ -23,6 +23,24 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 10 — WhatsApp CRM (2026-05-31):**
+- `twilioService.sendWhatsApp(to, body)` (Twilio WhatsApp API, `whatsapp:` prefix
+  both ends, withRetry, throws) + `safeWhatsApp` (never-throws wrapper). New env
+  `TWILIO_WHATSAPP_FROM` (falls back to `TWILIO_FROM_NUMBER`).
+- `clientUpdateService.generateWeeklyClientUpdate` — GPT-4o weekly results update
+  under the AGENCY brand to `ClientBrief.clientWhatsApp`; skips clients with no
+  number / no activity; logs an outbound `ClientMessage`. Cron
+  `/api/cron/client-whatsapp` `0 9 * * 1` (Mon 9am).
+- Event-triggered: the Reporter now WhatsApps the client on a booking milestone.
+- Communicator approve route now actually DELIVERS via WhatsApp when the message
+  channel is whatsapp (best-effort — approval is still recorded if delivery fails;
+  returns `delivered` flag).
+- **Honest scope:** real WhatsApp requires a Twilio WhatsApp sender + (for
+  business-initiated msgs outside the 24h window) approved message templates —
+  config/ops, not code. A true client INBOUND WhatsApp webhook isn't built (the
+  communicator is still driven via the dashboard composer / approve flow).
+  Runtime-unverified (needs Twilio WA creds). Pre-sprint Vercel check: 0 errors. tsc 0.
+
 **Sprint 9 — Client Communication Agent (2026-05-31):**
 - Migration (prod via Supabase MCP): new `ClientMessage` model {id, blueprintId,
   tenantId, direction, channel, intent, content, agentResponse, requiresApproval,

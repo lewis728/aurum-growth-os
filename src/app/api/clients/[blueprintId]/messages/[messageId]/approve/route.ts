@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { safeWhatsApp } from "@/lib/services/twilioService";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,22 @@ export async function POST(
   if (!replyText) return NextResponse.json({ error: "No reply text to send" }, { status: 400 });
 
   const now = new Date();
+
+  // Deliver via WhatsApp when that's the channel and a number is on file.
+  // Best-effort: a delivery failure still records the approval (owner sees it in
+  // the thread and can retry), it just isn't marked as channel-delivered.
+  let delivered = false;
+  if (msg.channel === "whatsapp") {
+    const brief = await prisma.clientBrief
+      .findUnique({ where: { blueprintId: params.blueprintId }, select: { clientWhatsApp: true } })
+      .catch(() => null);
+    const wa = brief?.clientWhatsApp?.trim();
+    if (wa) {
+      const sid = await safeWhatsApp(wa, replyText);
+      delivered = sid !== null;
+    }
+  }
+
   // Mark the inbound row approved + record the outbound reply, atomically.
   await prisma.$transaction([
     prisma.clientMessage.update({
@@ -54,7 +71,7 @@ export async function POST(
     }),
   ]);
 
-  return NextResponse.json({ ok: true, sent: true });
+  return NextResponse.json({ ok: true, sent: true, delivered });
 }
 
 export async function DELETE(

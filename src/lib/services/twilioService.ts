@@ -24,6 +24,14 @@ function getFromNumber(): string {
   return from;
 }
 
+// WhatsApp sender — Twilio expects the "whatsapp:" channel prefix on both ends.
+// Falls back to the Twilio sandbox number if a dedicated WA sender isn't set.
+function getWhatsAppFrom(): string {
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? process.env.TWILIO_FROM_NUMBER;
+  if (!from) throw new Error("TWILIO_WHATSAPP_FROM (or TWILIO_FROM_NUMBER) is not configured");
+  return from.startsWith("whatsapp:") ? from : `whatsapp:${from}`;
+}
+
 // ─── Phone Normalisation ──────────────────────────────────────────────────────
 
 /**
@@ -67,6 +75,47 @@ export async function sendDirectSMS(to: string, body: string): Promise<string> {
   );
 
   return message.sid;
+}
+
+// ─── sendWhatsApp (Sprint 10) ───────────────────────────────────────────────────
+
+/**
+ * Sends a WhatsApp message via Twilio to the given number. Normalises to E.164,
+ * adds the "whatsapp:" channel prefix on both ends. Returns the message SID.
+ * Wrapped in withRetry() per GR-02.
+ *
+ * THROWS on hard failure — callers (cron, reporter, communicator) wrap in their
+ * own try/catch so one failed send never breaks a batch.
+ */
+export async function sendWhatsApp(to: string, body: string): Promise<string> {
+  const client = getTwilioClient();
+  const from   = getWhatsAppFrom();
+  const toE164 = normaliseToE164(to);
+
+  const message = await withRetry(
+    () =>
+      client.messages.create({
+        to:   `whatsapp:${toE164}`,
+        from,
+        body,
+      }),
+    { maxAttempts: 3, baseDelayMs: 500, label: "TwilioService.sendWhatsApp" }
+  );
+
+  return message.sid;
+}
+
+/**
+ * Best-effort WhatsApp send — NEVER THROWS. Returns the SID on success, null
+ * otherwise. For fire-and-forget notification paths (weekly updates, milestones).
+ */
+export async function safeWhatsApp(to: string, body: string): Promise<string | null> {
+  try {
+    return await sendWhatsApp(to, body);
+  } catch (err) {
+    console.error("[twilioService.safeWhatsApp] failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 // ─── queueAppointmentReminders ────────────────────────────────────────────────

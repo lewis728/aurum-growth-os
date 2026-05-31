@@ -6,6 +6,7 @@
     { "path": "/api/cron/performance-aggregation", "schedule": "0 3 * * 1" },
     { "path": "/api/cron/agent-reasoning",         "schedule": "0 */4 * * *" },
     { "path": "/api/cron/morning-briefing",        "schedule": "0 6 * * *"  },
-    { "path": "/api/cron/nightly-learning",        "schedule": "0 0 * * *"  }
+    { "path": "/api/cron/nightly-learning",        "schedule": "0 0 * * *"  },
+    { "path": "/api/cron/client-whatsapp",         "schedule": "0 9 * * 1"  }
   ]
 }
