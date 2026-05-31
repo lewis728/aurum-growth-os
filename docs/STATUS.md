@@ -98,3 +98,32 @@ Retell's post-call webhook. This is the highest-value verification available pre
 3. When Meta clears: breakdown-level insights + deeper GPT reasoning — the "knows
    exactly why it's working" capability, which is the real differentiated product.
 4. Implement the deferred Sprint 10 WhatsApp send, or formally drop it from scope.
+
+## 7. ⚠️ TEMP overrides to restore before launch
+
+The subscription/billing gate is **disabled** for the solo test environment (no
+Stripe connected). **These MUST be restored before opening to paying customers** —
+otherwise anyone can use the platform and deploy clients without paying. Every site
+is marked in-code with the comment:
+`// TEMP: disabled for solo test env — restore before opening to paying customers`.
+
+### Cleanest restore: revert the two commits
+```
+git revert 7e4ec76   # server-side gates (canLaunchCampaign, isPlatformActive, create-route 402)
+git revert 5872f85   # client-side gate (useSubscriptionAccess overlay)
+```
+(Resolve any conflicts against later changes, then `npx tsc --noEmit` before pushing.)
+
+### Or restore each site by hand
+| File | Function / site | Current (TEMP) | Restore to |
+|---|---|---|---|
+| `src/hooks/useSubscriptionAccess.ts` | `useSubscriptionAccess()` | returns hard-coded `active` `PERMISSIVE_ACCESS`; SWR fetch + `deriveState` deleted | re-add the SWR fetch of `/api/billing/status` + `deriveState` + `canLaunch`/seat-cap logic |
+| `src/lib/access/subscriptionGuard.ts` | `canLaunchCampaign()` | returns `{ allowed: true, state: "active" }` | restore the no-subscription / past_due / trialing-3-seat-cap / active branches (consts `TRIAL_SEAT_CAP`, `INACTIVE_STATUSES` still present) |
+| `src/lib/services/stripeService.ts` | `isPlatformActive()` | returns `true` | restore: active → true; trialing → within `trialEndsAt`; else false |
+| `src/app/api/clients/create/route.ts` | post-validation gate | 402 gate removed; `getSubscriptionStatus`/`isPlatformActive` import removed | re-add `import { getSubscriptionStatus, isPlatformActive }` and the `if (!isPlatformActive(...)) 402` block (a leftover `// (Was: 402 ...)` comment marks the spot) |
+
+The original implementations of all four are in git history (pre-`5872f85`).
+
+### Also tied to billing (verify, not yet disabled)
+- `/api/billing/checkout` and `/api/billing/portal` are owner-gated via `isOwner()` — fine to leave.
+- The dashboard **Billing** tab and `BillingCard` still render the real (tiered) pricing UI; they read `/api/billing/status` which is unaffected by these overrides.
