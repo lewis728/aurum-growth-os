@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/competitor-intel",
       "schedule": "0 5 * * 5"
+    },
+    {
+      "path": "/api/cron/outreach-autopilot",
+      "schedule": "0 * * * *"
     }
   ]
 }

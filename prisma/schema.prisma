@@ -582,6 +582,13 @@ model OutreachProspect {
   lastEmailAt      DateTime?
   repliedAt        DateTime?
   bookedAt         DateTime?
+  // ── Autonomous reply layer + A/B ────────────────────────────────────────────
+  subjectVariant   Int?     // which email-1 subject A/B variant this prospect got (0-2)
+  replyIntent      String?  // last classified reply intent (interested|question|objection|not_interested|unsubscribe|auto|unclear)
+  lastReplyText    String?  @db.Text
+  unsubscribed     Boolean  @default(false) // honoured forever — never contacted again
+  flagged          Boolean  @default(false) // needs human eyes (angry/legal/ambiguous)
+  flagReason       String?
   notes            String?  @db.Text
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -591,6 +598,21 @@ model OutreachProspect {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([vertical])
+}
+
+// Append-only audit of everything the autonomous outreach agent does — powers the
+// WhatsApp digest, the A/B stats, and a "run it like a pro" activity trail.
+model OutreachEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  prospectId String?
+  type       String   // reply_received|reply_sent|calendly_sent|booked|unsubscribed|flagged|autopilot_run|pushed
+  detail     String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([prospectId])
+  @@index([tenantId, type])
 }
 
 model OutreachSequence {

@@ -112,3 +112,53 @@ export async function injectLeads(leads: InstantlyLead[]): Promise<InstantlyInje
   const injected = leadIds.filter((id) => id !== null).length;
   return { ok: injected > 0, injected, failed: leadIds.length - injected, leadIds };
 }
+
+// ── Reply sending (autonomous reply layer) ──────────────────────────────────
+// Sends a reply to a prospect who answered a cold email. NOTE: Instantly's API
+// surface for threaded replies varies by account/plan; this attempts the v2
+// reply endpoint and returns ok=false (never throws) if it's unavailable, so the
+// caller can fall back to handing the drafted reply to the owner instead of
+// silently dropping it. Verify the exact endpoint against your Instantly account.
+export interface SendReplyInput {
+  toEmail:   string;
+  body:      string;
+  leadId?:   string | null; // Instantly lead id, when known
+  subject?:  string;
+}
+
+export interface SendReplyResult {
+  ok:            boolean;
+  notConfigured?: boolean;
+  error?:        string;
+}
+
+export async function sendReply(input: SendReplyInput): Promise<SendReplyResult> {
+  const apiKey = process.env.INSTANTLY_API_KEY;
+  const campaignId = process.env.INSTANTLY_CAMPAIGN_ID;
+  if (!apiKey || !campaignId) {
+    return { ok: false, notConfigured: true, error: "Instantly not configured" };
+  }
+  try {
+    const res = await fetch(`${INSTANTLY_BASE}/emails/reply`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        campaign:   campaignId,
+        lead:       input.leadId ?? undefined,
+        eaccount_email: input.toEmail,
+        to:         input.toEmail,
+        subject:    input.subject,
+        body:       input.body,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[instantly] reply ${input.toEmail} → HTTP ${res.status}: ${redact(text).slice(0, 160)}`);
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error(`[instantly] reply ${input.toEmail} failed:`, err instanceof Error ? err.message : err);
+    return { ok: false, error: err instanceof Error ? err.message : "error" };
+  }
+}
