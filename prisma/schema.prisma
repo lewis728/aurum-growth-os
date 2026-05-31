@@ -520,3 +520,14 @@ model CreativeSimulation {
   @@index([tenantId])
   @@index([blueprintId])
 }
+
+model WaitlistEntry {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  agencyName  String?
+  clientCount String?  // free-text "how many clients" answer
+  source      String?  // marketing page / campaign attribution
+  createdAt   DateTime @default(now())
+  @@index([createdAt])
+}
