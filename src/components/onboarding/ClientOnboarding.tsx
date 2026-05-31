@@ -235,7 +235,7 @@ export function ClientOnboarding({
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
                 {form.objections.map((o, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    <input value={o.objection} onChange={e => setObjection(i, "objection", e.target.value)} placeholder='"It\'s too expensive"' style={input} />
+                    <input value={o.objection} onChange={e => setObjection(i, "objection", e.target.value)} placeholder="e.g. It's too expensive" style={input} />
                     <input value={o.response} onChange={e => setObjection(i, "response", e.target.value)} placeholder="Your best response" style={input} />
                   </div>
                 ))}
