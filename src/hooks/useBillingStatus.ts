@@ -13,6 +13,18 @@ export interface BillingClient {
   status:       string;
 }
 
+export interface VolumePricing {
+  clientCount:     number;
+  perClientGbp:    number;
+  platformFeeGbp:  number;
+  monthlyTotalGbp: number;
+  nextTier: {
+    clientsUntil:     number;
+    perClientGbp:     number;
+    monthlySavingGbp: number;
+  } | null;
+}
+
 export interface BillingStatus {
   platformActive:   boolean;
   subscribed:       boolean;
@@ -22,6 +34,7 @@ export interface BillingStatus {
   fullServiceSeats: number;
   seatPrices:       { starter: number; full_service: number };
   monthlyTotal:     number;
+  volume:           VolumePricing;
   nextBillingDate:  string | null;
   trialEndsAt:      string | null;
   clients:          BillingClient[];

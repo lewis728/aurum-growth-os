@@ -263,6 +263,70 @@ export function computeMonthlyTotal(starterSeats: number, fullServiceSeats: numb
   return PRICING.platform + starterSeats * PRICING.starter + fullServiceSeats * PRICING.full_service;
 }
 
+// ─── Volume pricing (Sprint 11) ──────────────────────────────────────────────
+// Per-client price drops as the agency moves their whole roster onto Aurum. The
+// band is chosen by TOTAL client count and applies to EVERY client (not marginal),
+// so adding a client can lower the price of all of them — the migration incentive.
+//
+//   1-5 clients   → £500/client
+//   6-10 clients  → £400/client
+//   11-20 clients → £350/client
+//   21+ clients   → £300/client
+//   + £97/month platform fee, always.
+export const VOLUME_TIERS: ReadonlyArray<{ min: number; max: number; perClient: number }> = [
+  { min: 1,  max: 5,        perClient: 500 },
+  { min: 6,  max: 10,       perClient: 400 },
+  { min: 11, max: 20,       perClient: 350 },
+  { min: 21, max: Infinity, perClient: 300 },
+] as const;
+
+export interface VolumePricing {
+  clientCount:     number;
+  perClientGbp:    number;   // current per-client rate
+  platformFeeGbp:  number;
+  monthlyTotalGbp: number;   // platform + clientCount × perClient
+  // Next-tier nudge (null once at the cheapest band).
+  nextTier: {
+    clientsUntil:    number;  // how many more clients to reach it
+    perClientGbp:    number;  // the cheaper rate
+    monthlySavingGbp: number; // saving/month at that point vs paying the new rate now
+  } | null;
+}
+
+function tierFor(count: number): { perClient: number } {
+  if (count <= 0) return { perClient: VOLUME_TIERS[0]!.perClient };
+  return VOLUME_TIERS.find((t) => count >= t.min && count <= t.max) ?? VOLUME_TIERS[VOLUME_TIERS.length - 1]!;
+}
+
+/**
+ * Computes volume-based pricing for a given client count, plus the next-tier nudge
+ * ("you're N clients away from £X/client"). Pure + total.
+ */
+export function computeVolumePricing(clientCount: number): VolumePricing {
+  const count = Math.max(0, Math.floor(clientCount));
+  const perClientGbp = tierFor(count).perClient;
+  const monthlyTotalGbp = PRICING.platform + count * perClientGbp;
+
+  // Find the next cheaper band above the current count.
+  const current = tierFor(count).perClient;
+  const nextBand = VOLUME_TIERS.find((t) => t.min > count && t.perClient < current);
+  let nextTier: VolumePricing["nextTier"] = null;
+  if (nextBand) {
+    const clientsUntil = nextBand.min - count;
+    // Saving/month once they reach the band: difference in per-client rate across
+    // the clients they'd then have, at minimum the band threshold count.
+    const atCount = nextBand.min;
+    const savingPerClient = current - nextBand.perClient;
+    nextTier = {
+      clientsUntil,
+      perClientGbp: nextBand.perClient,
+      monthlySavingGbp: savingPerClient * atCount,
+    };
+  }
+
+  return { clientCount: count, perClientGbp, platformFeeGbp: PRICING.platform, monthlyTotalGbp, nextTier };
+}
+
 /**
  * Whether the platform is usable for creating new clients.
  * - No subscription row yet → true (onboarding grace; they subscribe later).

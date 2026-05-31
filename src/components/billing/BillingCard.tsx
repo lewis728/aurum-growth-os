@@ -115,6 +115,26 @@ export function BillingCard() {
         </div>
       </div>
 
+      {/* Volume pricing (Sprint 11) — current per-client rate + next-tier nudge */}
+      {billing.volume && (
+        <div style={card}>
+          <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", marginBottom: "10px" }}>Volume pricing</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginBottom: "4px" }}>
+            <span className="font-mono" style={{ fontSize: "22px", color: "#fff", fontWeight: 300 }}>£{billing.volume.perClientGbp}</span>
+            <span style={{ fontSize: "12px", color: "#555" }}>/client · {billing.volume.clientCount} {billing.volume.clientCount === 1 ? "client" : "clients"}</span>
+          </div>
+          {billing.volume.nextTier ? (
+            <div style={{ fontSize: "12px", color: "#C9A84C", marginTop: "8px", lineHeight: 1.5 }}>
+              You&apos;re {billing.volume.nextTier.clientsUntil} {billing.volume.nextTier.clientsUntil === 1 ? "client" : "clients"} away from dropping to £{billing.volume.nextTier.perClientGbp}/client — saving £{billing.volume.nextTier.monthlySavingGbp}/month.
+            </div>
+          ) : (
+            <div style={{ fontSize: "12px", color: "#22c55e", marginTop: "8px" }}>
+              You&apos;re on the best rate — £{billing.volume.perClientGbp}/client.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Seat breakdown */}
       <div style={card}>
         <div style={{ fontSize: "13px", fontWeight: 500, color: "#fff", marginBottom: "14px" }}>This month</div>

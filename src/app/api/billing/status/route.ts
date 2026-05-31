@@ -11,6 +11,7 @@ import {
   getSubscriptionStatus,
   isPlatformActive,
   computeMonthlyTotal,
+  computeVolumePricing,
   PRICING,
 } from "@/lib/services/stripeService";
 
@@ -36,6 +37,9 @@ export async function GET(): Promise<NextResponse> {
   const fullServiceSeats = clients.filter(c => c.clientTier !== "starter").length;
   const monthlyTotal     = computeMonthlyTotal(starterSeats, fullServiceSeats);
 
+  // Volume pricing (Sprint 11) — priced by TOTAL billable client count.
+  const volume = computeVolumePricing(clients.length);
+
   return NextResponse.json({
     platformActive:  isPlatformActive(status),
     subscribed:      status ? (status.status === "active" || status.status === "trialing") : false,
@@ -45,6 +49,7 @@ export async function GET(): Promise<NextResponse> {
     fullServiceSeats,
     seatPrices:      { starter: PRICING.starter, full_service: PRICING.full_service },
     monthlyTotal,
+    volume,
     nextBillingDate: status?.currentPeriodEnd?.toISOString() ?? null,
     trialEndsAt:     status?.trialEndsAt?.toISOString() ?? null,
     clients,

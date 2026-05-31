@@ -23,6 +23,21 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 11 — Volume pricing (2026-05-31):**
+- `stripeService.computeVolumePricing(clientCount)` + `VOLUME_TIERS`: per-client
+  price by TOTAL client count (1-5 £500, 6-10 £400, 11-20 £350, 21+ £300), applied
+  to every client (not marginal) — adding a client can lower all their prices.
+  £97 platform fee always. Returns the next-tier nudge (clients-until + saving).
+  Pure/total; existing flat `computeMonthlyTotal`/`PRICING` retained (still used).
+- `/api/billing/status` now returns a `volume` block; `useBillingStatus` typed for it.
+- BillingCard shows a "Volume pricing" card: current £/client + "You're N clients
+  away from dropping to £X/client — saving £Y/month" (or "best rate" at 21+).
+- **Honest scope:** this is the PRESENTATION + math of volume pricing. Actual Stripe
+  charging still uses the existing per-seat price IDs — wiring Stripe to bill the
+  volume rate (metered/tier price updates) is a Stripe-config + subscription-item
+  change, deferred. Billing gates remain TEMP-disabled (STATUS §9). tsc 0.
+  Pre-sprint Vercel check: 0 errors.
+
 **Sprint 3C — Agent Team View (2026-05-31):**
 - `GET /api/clients/[blueprintId]/team` — the 5 AI employees; each role's last
   action derived from its REAL signal (not agentName, which is brittle): caller=
