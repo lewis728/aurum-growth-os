@@ -13,10 +13,11 @@
  * Fail-safe   — external calls go through withRetry inside retellService; a hard
  *               failure throws so the caller (deploy route) can surface it.
  *
- * On success the agent id is written to BOTH places that matter:
- *   1. AIRepresentative.retellAgentId / retellLlmId  (canonical record)
- *   2. CampaignBlueprint.voice.retellAgentId         (what speedToLeadService reads)
- * and the blueprint is set LIVE so new leads are called within 60 seconds.
+ * The agent/LLM ids live in CampaignBlueprint.voice (the JSON layer that
+ * speedToLeadService reads at call time). AIRepresentative has no such columns,
+ * so storing them in the voice layer keeps a single source of truth and needs no
+ * migration. The representative's lastDeployedAt is stamped on every deploy.
+ * On success the blueprint is set LIVE so new leads are called within 60 seconds.
  */
 
 import { Prisma } from "@prisma/client";
@@ -25,6 +26,7 @@ import {
   createRetellLlm,
   createRetellAgent,
   updateRetellLlmPrompt,
+  resolveRetellVoiceId,
 } from "@/lib/services/retellService";
 import { assembleRetellPromptAsync } from "@/lib/services/retellPromptAssembler";
 import { renderBriefBlock } from "@/lib/agents/clientContext";
@@ -34,6 +36,11 @@ export interface ProvisionResult {
   agentId: string;
   llmId:   string;
   created: boolean; // true = new agent created, false = existing agent updated in place
+}
+
+interface VoiceLayerIds {
+  retellAgentId?: string;
+  retellLlmId?:   string;
 }
 
 function appBaseUrl(): string {
@@ -63,8 +70,8 @@ function buildBlueprintForAssembler(row: {
     serviceIntent:  row.vertical,
     businessName:   row.businessName,
     targetLocation: row.targetLocation,
-    voiceLayer:     (row.voice ?? {}),
-    crmLayer:       (row.crm ?? {}),
+    voiceLayer:     row.voice ?? {},
+    crmLayer:       row.crm ?? {},
   } as unknown as Parameters<typeof assembleRetellPromptAsync>[0];
 }
 
@@ -114,24 +121,29 @@ export async function provisionClientAgent(
   if (rep.tenantId !== tenantId) throw new Error("Representative does not belong to this tenant");
 
   // ── Build the brief-aware system prompt ────────────────────────────────────
-  const blueprint   = buildBlueprintForAssembler(blueprintRow);
-  const basePrompt  = await assembleRetellPromptAsync(blueprint, rep);
-  const briefBlock  = renderBriefBlock(brief);
+  const blueprint    = buildBlueprintForAssembler(blueprintRow);
+  const basePrompt   = await assembleRetellPromptAsync(blueprint, rep);
+  const briefBlock   = renderBriefBlock(brief);
   const systemPrompt = `${basePrompt}\n\n${briefBlock}`.trim();
 
-  const webhookUrl = `${appBaseUrl()}/api/webhooks/calls/${blueprintId}`;
+  const webhookUrl     = `${appBaseUrl()}/api/webhooks/calls/${blueprintId}`;
+  const resolvedVoice  = resolveRetellVoiceId(rep.voiceId);
+  const existingVoice  =
+    blueprintRow.voice && typeof blueprintRow.voice === "object"
+      ? (blueprintRow.voice as VoiceLayerIds)
+      : {};
 
   // ── Idempotent: agent already exists → update its prompt in place ───────────
-  if (rep.retellAgentId && rep.retellLlmId) {
-    await updateRetellLlmPrompt(rep.retellLlmId, systemPrompt);
+  if (existingVoice.retellAgentId && existingVoice.retellLlmId) {
+    await updateRetellLlmPrompt(existingVoice.retellLlmId, systemPrompt);
     await prisma.aIRepresentative.update({
       where: { blueprintId },
       data:  { lastDeployedAt: new Date() },
     });
     await persistAgentToBlueprint(
-      blueprintId, blueprintRow.voice, rep.retellAgentId, rep.retellLlmId, rep.voiceId, webhookUrl,
+      blueprintId, blueprintRow.voice, existingVoice.retellAgentId, existingVoice.retellLlmId, resolvedVoice, webhookUrl,
     );
-    return { agentId: rep.retellAgentId, llmId: rep.retellLlmId, created: false };
+    return { agentId: existingVoice.retellAgentId, llmId: existingVoice.retellLlmId, created: false };
   }
 
   // ── Create: LLM (holds prompt) → agent (binds voice + webhook) ──────────────
@@ -139,16 +151,16 @@ export async function provisionClientAgent(
   const { llmId }   = await createRetellLlm({ generalPrompt: systemPrompt, beginMessage });
   const { agentId } = await createRetellAgent({
     llmId,
-    voiceId:    rep.voiceId,
-    agentName:  `${rep.repName} — ${blueprintRow.businessName}`,
+    voiceId:   resolvedVoice,
+    agentName: `${rep.repName} — ${blueprintRow.businessName}`,
     webhookUrl,
   });
 
   await prisma.aIRepresentative.update({
     where: { blueprintId },
-    data:  { retellAgentId: agentId, retellLlmId: llmId, lastDeployedAt: new Date() },
+    data:  { lastDeployedAt: new Date() },
   });
-  await persistAgentToBlueprint(blueprintId, blueprintRow.voice, agentId, llmId, rep.voiceId, webhookUrl);
+  await persistAgentToBlueprint(blueprintId, blueprintRow.voice, agentId, llmId, resolvedVoice, webhookUrl);
 
   return { agentId, llmId, created: true };
 }
