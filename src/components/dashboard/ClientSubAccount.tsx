@@ -5,6 +5,7 @@ import { CreativePanel } from "@/components/dashboard/CreativePanel";
 import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
 import { PipelineBoard, type PipelineLead } from "@/components/dashboard/PipelineBoard";
 import { ClientMessages } from "@/components/dashboard/ClientMessages";
+import { TeamStrip } from "@/components/dashboard/TeamStrip";
 
 interface AgentAction {
   id:         string;
@@ -402,6 +403,14 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
             </div>
           </div>
         ))}
+      </div>
+
+      {/* AI team strip (Sprint 3C) — the 5 specialist roles for this client. */}
+      <div>
+        <div className="text-sm font-medium mb-3" style={{ color: "var(--text-1)" }}>
+          Their AI team
+        </div>
+        <TeamStrip blueprintId={clientId} />
       </div>
 
       {/* CRM pipeline (Sprint 3B) — leads move automatically by derived stage. */}
