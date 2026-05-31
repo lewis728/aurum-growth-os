@@ -23,6 +23,17 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 3C — Agent Team View (2026-05-31):**
+- `GET /api/clients/[blueprintId]/team` — the 5 AI employees; each role's last
+  action derived from its REAL signal (not agentName, which is brittle): caller=
+  CALL_* actions, scheduler=latest Appointment, mediaBuyer=media actions, reporter=
+  briefing/risk/milestone, learner=ClientBrief.learningsUpdatedAt. Tenant-scoped,
+  never 500s.
+- `TeamStrip.tsx` — 5 role cards (role+agent name, initial avatar, status dot
+  green=acted in 24h, last action, mono timestamp, hover lift), mounted above the
+  pipeline in the client sub-account.
+- tsc 0. Pre-sprint Vercel check: 0 errors.
+
 **Sprint 10 — WhatsApp CRM (2026-05-31):**
 - `twilioService.sendWhatsApp(to, body)` (Twilio WhatsApp API, `whatsapp:` prefix
   both ends, withRetry, throws) + `safeWhatsApp` (never-throws wrapper). New env
