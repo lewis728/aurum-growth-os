@@ -665,6 +665,9 @@ Build to that standard. Nothing less.
 
 ## Questions from Claude Code
 
+Q: 10F vector search — pgvector available?
+A: Option 1 — pgvector confirmed available and enabled on Supabase (version 0.8.0, just enabled). Use vector(1536) column type with ORDER BY embedding <=> query for cosine similarity. Real cross-client pattern matching. Build it properly.
+
 Q: 10D/10E need paid external APIs. How should I build them?
 A: Option 1 — Build graceful shells. 
 
