@@ -743,6 +743,61 @@ Build to that standard. Nothing less.
 
 ---
 
+## PRIORITY BUILD — Agent Training Simulation System
+
+After completing the current sprints, build this immediately. Gemini has provided the complete production code. Use it exactly as written but adapt imports to match the actual codebase.
+
+**Key notes before building:**
+- `MediaBuyerEngine` import must match actual export from `src/lib/agents/roles/mediaBuyer.ts` — check what it actually exports before writing the import
+- Prisma models referenced (metaInsights, callLogs, dailyCampaignMetrics) may not exist — use the actual models we have (AgentAction, Lead, Appointment etc)
+- `prisma.blueprint.update` should be `prisma.campaignBlueprint.update`
+- Add `ShadowAction` model to schema.prisma and migrate via Supabase MCP
+- The certainty index formula fix is critical — use `Math.max(volatilityIndex, 0.01)` to prevent division by zero
+
+**Create these files exactly as specified:**
+
+`src/lib/training/adversarialEngine.ts` — LEAD_PERSONAS and CAMPAIGN_SCENARIOS as written
+
+`src/lib/training/callerTrainer.ts` — CallerTrainer class with runSimulation, gradeCall, refineScript
+
+`src/lib/training/mediaBuyerTrainer.ts` — MediaBuyerTrainer class — adapt the MediaBuyerEngine import to match actual exports
+
+`src/lib/training/shadowMode.ts` — ShadowModeManager class — adapt Prisma model names to match actual schema
+
+`src/lib/training/certaintyIndex.ts` — calculateCertaintyIndex with division-by-zero fix applied
+
+`src/lib/training/trainingRunner.ts` — main training orchestrator with concurrency pool
+
+**Add to package.json scripts:**
+```
+"train": "tsx src/lib/training/trainingRunner.ts",
+"train:quick": "tsx src/lib/training/trainingRunner.ts --scenarios 10",
+"train:caller": "tsx src/lib/training/trainingRunner.ts --agent caller",
+"train:buyer": "tsx src/lib/training/trainingRunner.ts --agent mediaBuyer"
+```
+
+**Schema addition — add to prisma/schema.prisma:**
+```
+model ShadowAction {
+  id                String   @id @default(cuid())
+  blueprintId       String
+  agentRole         String
+  intendedAction    String
+  intendedReasoning String
+  actualOutcome     String?
+  wasCorrect        Boolean?
+  createdAt         DateTime @default(now())
+  @@index([blueprintId, agentRole])
+}
+```
+
+Also add TrainingResult model (already specced earlier in this channel).
+Migrate both via Supabase MCP.
+
+After building: tsc clean, run `npm run train:quick` to verify it executes and produces a scorecard, commit and push.
+
+---
+
 ## Questions from Claude Code
 
 Q: 10F vector search — pgvector available?

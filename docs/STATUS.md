@@ -51,6 +51,21 @@ white-label branding, team seats/roles.
   aesthetics-adjacent verticals; the rest fall through to solid generic defaults
   (not 20 bespoke sets). Runtime-unverified. tsc 0.
 
+**Sprint 13 — Vertical Training System (2026-05-31, branch `sprints-13-17`):**
+- `src/lib/agents/verticalTrainer.ts` — `trainVertical(vertical)` + `trainAllVerticals()`.
+  Per vertical: (1) graceful Meta Ad Library scrape of live GB ads
+  (`META_ADLIBRARY_TOKEN`; skipped cleanly when unset — Meta app pending),
+  (2) GPT-4o writes a ≤2000-word first-person "30-year expert" brief covering
+  what's winning / saturated / emerging + audience/timing + ASA/CAP compliance,
+  (3) persists to `VerticalProfile.expertBrief` (+ `performanceData.lastTrainedAt`/
+  `adLibrarySampleSize`/`trainingSource`). NEVER THROWS.
+- `mediaBuyer` already reads `benchmark.expertBrief`, so the brief flows into every
+  agent decision with no further wiring.
+- Cron `src/app/api/cron/vertical-training/route.ts` (Bearer CRON_SECRET, fail-safe,
+  maxDuration 300) + `vercel.json` entry `0 0 * * 0` (Sunday midnight).
+- Schema already had `expertBrief` — no migration needed.
+- Runtime-unverified (no GPT/Meta call run from this env). tsc 0.
+
 **Sprint 10F — Cross-tenant vector knowledge graph (2026-05-31):**
 - **pgvector 0.8.0 ENABLED** in prod (Supabase MCP); `VectorKnowledge` table with
   a real `embedding vector(1536)` column + vertical index. Prisma model declares
