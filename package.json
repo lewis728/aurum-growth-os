@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
-    "fire-lead": "tsx scripts/fire-test-lead.ts"
+    "fire-lead": "tsx scripts/fire-test-lead.ts",
+    "fire-postcall": "tsx scripts/fire-test-postcall.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
