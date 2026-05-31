@@ -321,6 +321,86 @@ After building: tsc clean, commit, push, then continue to Sprint 11.
 
 ---
 
+### SPRINT 3E — Data Simulation Engine (BUILD FIRST — before 3D)
+
+Before any real clients exist, simulate realistic campaign data to pre-train every intelligence layer. When the first real client goes live, the system is already smart.
+
+Create src/lib/simulation/dataSimulator.ts
+
+This runs once via a one-time script AND can be triggered via POST /api/admin/simulate-data (CRON_SECRET gated).
+
+**What gets simulated:**
+
+1. VERTICAL INTELLIGENCE SIMULATION
+For each of the 20 verticals, generate 50 simulated campaign outcomes:
+- Realistic CPL ranges per vertical (aesthetics £30-80, personal injury £40-120, roofing £25-60 etc)
+- Creative format performance patterns (before/after outperforms lifestyle 3:1 in aesthetics)
+- Audience age/gender patterns (35-50 female converts best for aesthetics)
+- Seasonal patterns (January and September peak for aesthetics in UK)
+- Objection frequency patterns (price most common in aesthetics, timing in roofing)
+- Show rate patterns by day/time slot
+
+Feed all of this into VerticalProfile.performanceData for each vertical.
+Feed expert pattern descriptions into VerticalProfile.expertBrief.
+This makes Marcus and Kai start with real knowledge, not blank slates.
+
+2. VECTOR KNOWLEDGE SEEDING
+Generate 20 winning psychological frameworks per vertical — the kinds of creative patterns that consistently outperform:
+- For aesthetics: "Outcome transformation narrative — before state described in lead's language, after state shown through specific lifestyle outcome, social proof from similar demographic"
+- For personal injury: "Urgency + entitlement frame — lead's right to compensation, time-sensitive claim window, specific local expertise"
+- For roofing: "Risk mitigation frame — cost of doing nothing vs cost of fixing now, weather urgency, property value protection"
+
+Generate OpenAI embeddings for each pattern and store in VectorKnowledge table.
+This means the cross-client intelligence graph has real patterns to draw from from day one.
+
+3. LEAD SCORING CALIBRATION
+Generate 500 simulated leads with known outcomes (booked/qualified/no_answer/not_interested).
+Record: form fill speed, time of day, day of week, email domain type, postcode affluence tier.
+Train the lead scoring weights against actual booking outcomes.
+Store calibrated weights in a new LeadScoringConfig table per vertical.
+
+4. OBJECTION PLAYBOOK POPULATION
+For each vertical, generate the top 10 most common objections with proven response patterns:
+- Price objections → value anchoring response
+- Timing objections → urgency reframe
+- Trust objections → social proof response
+- Competitor objections → differentiation response
+
+Store in VerticalProfile.objectionPlaybook (Json field — add to schema).
+
+5. CALL TIMING OPTIMISATION
+Generate show rate data by day/time for each vertical based on industry patterns:
+- Aesthetics: Tuesday-Thursday 10am-2pm highest show rate
+- Personal injury: Monday-Wednesday 9am-11am
+- Roofing: Tuesday-Thursday 8am-10am (tradespeople start early)
+
+Store in VerticalProfile.callTimingData (Json field — add to schema).
+
+**The simulation script:**
+
+Create scripts/seed-intelligence.ts
+
+Runs all 5 simulations above. Can be run repeatedly — uses upsert so it never creates duplicates. Takes about 2 minutes to run (OpenAI embedding calls).
+
+Add to package.json: "seed:intelligence": "tsx scripts/seed-intelligence.ts"
+
+**Schema additions:**
+- VerticalProfile: objectionPlaybook Json?, callTimingData Json? (add via Supabase MCP)
+- New table: LeadScoringConfig { id, vertical, weights Json, calibratedAt DateTime }
+
+**After running this:**
+- Marcus knows aesthetics CPL benchmarks from real industry patterns
+- Kai has a starting knowledge base of what works per vertical
+- Sophie's lead scoring is calibrated against realistic outcome data
+- The vector knowledge graph has 20 winning patterns per vertical ready to deploy
+- Call timing is pre-optimised per vertical
+
+The system starts intelligent. Real data makes it smarter. But it never starts from zero.
+
+After building: tsc clean, run npx tsx scripts/seed-intelligence.ts to verify it executes, commit and push.
+
+---
+
 ### SPRINT 3D — Editable SMS Templates + Call Scripts In-App (BUILD NEXT)
 
 Agency owners must be able to edit all communication templates directly in the dashboard and save them. Changes go live immediately for all future leads. No code changes ever needed.
