@@ -15,6 +15,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioService";
 import { extractObjections } from "@/lib/services/objectionService";
+import { createCalendarEvent } from "@/lib/services/calendarService";
 import type { LeadStatus } from "@/types/lead";
 
 export const dynamic = "force-dynamic";
@@ -172,6 +173,10 @@ export async function POST(
             data:  { status: "booked", callAnalysis: callAnalysisData },
           }),
         ]);
+
+        // Sync the booking into the tenant's connected calendar (Google).
+        // Best-effort: never throws — the appointment is already persisted.
+        await createCalendarEvent(appointment.id);
 
         // Queue scheduled reminders (confirmation + day-before + hour-before).
         await queueAppointmentReminders(appointment.id, lead.id);

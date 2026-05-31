@@ -11,7 +11,38 @@
 
 import { prisma } from "@/lib/prisma";
 import { createPhoneCall, toE164 } from "@/lib/services/retellService";
+import { buildClientContext } from "@/lib/agents/clientContext";
 import { CampaignStatus } from "@/enums/campaignEnums";
+
+// Retell dynamic variables must all be strings. Renders the brief's
+// objectionResponses (stored as Json — array of {objection,response} or a
+// flat map) into a compact, voice-agent-readable string.
+function renderObjectionsForCall(raw: unknown): string {
+  if (!raw) return "";
+  try {
+    if (Array.isArray(raw)) {
+      return raw
+        .map((o) => {
+          if (o && typeof o === "object") {
+            const { objection, response } = o as { objection?: string; response?: string };
+            if (objection && response) return `If they say "${objection}": ${response}`;
+          }
+          return null;
+        })
+        .filter((x): x is string => x !== null)
+        .join(" | ");
+    }
+    if (typeof raw === "object") {
+      return Object.entries(raw as Record<string, unknown>)
+        .map(([k, v]) => (typeof v === "string" ? `If they say "${k}": ${v}` : null))
+        .filter((x): x is string => x !== null)
+        .join(" | ");
+    }
+  } catch {
+    /* ignore malformed */
+  }
+  return "";
+}
 
 export interface SpeedToLeadLead {
   id:        string;
@@ -112,16 +143,26 @@ export async function placeSpeedToLeadCall(opts: {
       return;
     }
 
+    // Inject the client brief into the call so the SDR is fully briefed on the
+    // phone — ideal customer, qualification questions, and objection handling.
+    // buildClientContext never throws; brief may be null for un-briefed clients.
+    const context = await buildClientContext(blueprintId);
+    const brief   = context.brief;
+
     const { callId } = await createPhoneCall({
       fromNumber,
       toNumber,
       agentId,
       dynamicVariables: {
-        lead_first_name:     lead.firstName,
-        business_name:       blueprint.businessName,
-        vertical:            blueprint.vertical,
-        agent_name:          agentName,
-        service_description: blueprint.offerHook ?? "",
+        lead_first_name:        lead.firstName,
+        business_name:          blueprint.businessName,
+        vertical:               blueprint.vertical,
+        agent_name:             agentName,
+        service_description:    blueprint.offerHook ?? "",
+        ideal_customer:         brief?.idealCustomerProfile ?? "",
+        ideal_customer_profile: brief?.idealCustomerProfile ?? "",
+        qualification_questions: brief?.qualificationQuestions ?? "",
+        objection_responses:    renderObjectionsForCall(brief?.objectionResponses),
       },
     });
 
