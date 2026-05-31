@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { provisionClientAgent } from "@/lib/services/agentProvisioning";
-import { getRetellLlmPrompt } from "@/lib/services/retellService";
+import { getRetellLlmPrompt, listRetellPhoneNumbers } from "@/lib/services/retellService";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
+  // ?phones=1 → list the account's Retell phone numbers + their agent bindings.
+  if (req.nextUrl.searchParams.get("phones")) {
+    const numbers = await listRetellPhoneNumbers();
+    return NextResponse.json(
+      { ok: true, fromNumberEnv: process.env.RETELL_FROM_NUMBER ?? null, numbers },
+      { status: 200 },
+    );
+  }
+
   const blueprintId = req.nextUrl.searchParams.get("blueprintId");
   if (!blueprintId) {
     return NextResponse.json({ error: "blueprintId required" }, { status: 400 });

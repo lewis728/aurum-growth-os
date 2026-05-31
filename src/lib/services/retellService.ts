@@ -284,6 +284,46 @@ export async function updateRetellLlmPrompt(llmId: string, generalPrompt: string
 }
 
 /**
+ * Lists the phone numbers in the Retell account. GET /list-phone-numbers.
+ * Returns the raw array so we can inspect number ↔ agent bindings. [] on error.
+ */
+export async function listRetellPhoneNumbers(): Promise<unknown[]> {
+  const apiKey = getRetellApiKey();
+  try {
+    const res = await fetch(`${RETELL_BASE_URL}/list-phone-numbers`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as unknown;
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Binds a phone number to an agent for outbound (and inbound) calls.
+ * PATCH /update-phone-number/{phone_number}. Idempotent. Throws on failure.
+ */
+export async function bindPhoneNumberToAgent(phoneNumber: string, agentId: string): Promise<void> {
+  const apiKey = getRetellApiKey();
+  await withRetry(
+    async () => {
+      const res = await fetch(`${RETELL_BASE_URL}/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body:    JSON.stringify({ outbound_agent_id: agentId, inbound_agent_id: agentId }),
+      });
+      if (!res.ok) {
+        const rawErr = await res.text().catch(() => "");
+        throw new Error(`Retell update-phone-number failed: HTTP ${res.status} — ${rawErr || "no body"}`);
+      }
+    },
+    { maxAttempts: 3, baseDelayMs: 500, label: "retellService.bindPhoneNumberToAgent" }
+  );
+}
+
+/**
  * Fetches a Retell LLM's current general_prompt. GET /get-retell-llm/{llm_id}.
  * Used to verify what prompt an agent is actually running. Returns null on error.
  */
