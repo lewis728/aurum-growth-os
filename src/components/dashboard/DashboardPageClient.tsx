@@ -16,6 +16,7 @@ import ClientSubAccount from "@/components/dashboard/ClientSubAccount";
 import { LiveAgentFeed } from "@/components/dashboard/LiveAgentFeed";
 import BrandingConfig from "@/components/onboarding/BrandingConfig";
 import { TeamSettings } from "@/components/dashboard/TeamSettings";
+import { ProspectResearch } from "@/components/dashboard/ProspectResearch";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ClientSummary {
@@ -82,9 +83,10 @@ function StatusDot({ status }: { status: ClientSummary["status"] }) {
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (p: string) => void }) {
   const navMain = [
-    { id: "dashboard", label: "Dashboard", icon: "⊞" },
-    { id: "clients",   label: "Clients",   icon: "◎" },
-    { id: "campaigns", label: "Campaigns", icon: "▶" },
+    { id: "dashboard", label: "Dashboard",   icon: "⊞" },
+    { id: "clients",   label: "Clients",     icon: "◎" },
+    { id: "campaigns", label: "Campaigns",   icon: "▶" },
+    { id: "prospects", label: "Win clients", icon: "✦" },
   ];
   const navIntel = [
     { id: "leads",     label: "Leads",    icon: "↓" },
@@ -658,6 +660,8 @@ function DashboardView() {
                 );
               case "clients":
                 return <ClientOverview />;
+              case "prospects":
+                return <ProspectResearch />;
               case "settings":
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

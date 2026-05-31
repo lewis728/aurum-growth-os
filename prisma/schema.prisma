@@ -531,3 +531,25 @@ model WaitlistEntry {
   createdAt   DateTime @default(now())
   @@index([createdAt])
 }
+
+// ── ProspectResearch ──────────────────────────────────────────────────────────
+// Sprint 17 — the "win new clients" tool. The agency owner researches a prospect;
+// we scrape their site, check their Meta ads, and GPT-4o writes a 90-day proposal
+// the owner can present like a £5,000 strategy session.
+model ProspectResearch {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  companyName        String
+  websiteUrl         String
+  vertical           String?
+  location           String?
+  websiteSummary     String?  @db.Text
+  competitorFindings Json?    // { adCount, sampleAds: string[], usedAdLibrary }
+  proposal           String?  @db.Text
+  status             String   @default("complete") // complete | failed
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+}
