@@ -103,8 +103,12 @@ export async function POST(
     return NextResponse.json({ success: true }, { status: 200 });
   }
 
-  // ── 5. Heavy processing via setImmediate ──────────────────────────────────────
-  setImmediate(async () => {
+  // ── 5. Heavy processing — AWAITED ─────────────────────────────────────────────
+  // Must NOT be deferred (setImmediate): on Vercel serverless the function is
+  // frozen once the response returns, so deferred work silently never runs. We
+  // await the booking/SMS/calendar work before responding. It's fast (a few DB
+  // writes + one SMS + a GPT objection extraction) — well within Retell's timeout.
+  await (async () => {
     try {
       // Resolve lead — prefer the reliable Retell call_id correlation, then fall
       // back to the analysis-supplied identifiers.
@@ -206,7 +210,7 @@ export async function POST(
     } catch (err) {
       console.error("[calls webhook] Processing error:", err instanceof Error ? err.message : err);
     }
-  });
+  })();
 
   return NextResponse.json({ success: true }, { status: 200 });
 }
