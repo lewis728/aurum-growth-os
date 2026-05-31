@@ -112,10 +112,12 @@ async function writeHook(input: HookInput, critique?: string): Promise<string> {
     ``,
     `Rules:`,
     `- Maximum ${MAX_WORDS} words. One sentence.`,
-    `- Reference something specific and REAL (a treatment, the town, reviews, a website detail).`,
-    `- If they have strong reviews but aren't running Meta ads, that's a great gap to point at.`,
-    `- Ultra-casual and warm. Lowercase is fine.`,
-    `- BANNED phrases (never use): "I noticed", "I came across", "impressive", "congratulations", "delve", "synergy", "reaching out". Anything formal is rejected.`,
+    `- Reference something specific and REAL about THEM (a named treatment, the town, their reviews, a line from their site). Specific beats clever.`,
+    `- Good angles for this kind of business, in order: a standout treatment or their reputation/reviews; the fact they've clearly got capacity to book more; or the classic gap — enquiries that come in after hours and don't get called back fast enough.`,
+    `- Do NOT assume they aren't advertising — most already run ads that just don't deliver consistently. If you mention ads at all, frame it as "running ads but the bookings aren't landing", never "you're not running ads".`,
+    `- Talk outcomes (more booked consultations / a fuller calendar), never tech or "AI".`,
+    `- Ultra-casual and warm, like a text to a mate. Lowercase is fine.`,
+    `- BANNED phrases (never use): "I noticed", "I came across", "impressive", "congratulations", "delve", "synergy", "reaching out", "AI-powered". Anything formal is rejected.`,
     critique ? `\nYour previous attempt was rejected by the editor: ${critique}\nWrite a better one that fixes this.` : ``,
   ].join("\n");
 
@@ -174,8 +176,8 @@ async function critiqueHook(hook: string): Promise<Critique> {
 function fallbackHook(input: HookInput): string {
   const name = input.cleanName || input.businessName;
   const place = input.location ? ` in ${input.location}` : "";
-  if (input.hasAds === false && (input.reviewCount ?? 0) > 0) {
-    return `${input.reviewCount} reviews for ${name}${place} and not a single meta ad running — that's leaving money on the table.`;
+  if ((input.reviewCount ?? 0) > 0) {
+    return `${input.reviewCount} reviews for ${name}${place} and i bet half your enquiries never get called back in time.`;
   }
   return `been looking at ${name}${place} and reckon you could be booking a lot more consults than you are.`;
 }

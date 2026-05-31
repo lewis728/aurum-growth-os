@@ -88,21 +88,29 @@ export async function decideReply(ctx: ReplyContext): Promise<ReplyDecision> {
 
   // 2. Classify + draft.
   const system =
-    `You are ${signer}, a real founder replying to a cold-email reply from a prospect. ` +
-    `You sound human, warm, casual, lowercase-friendly, never salesy or formal. Replies are SHORT ` +
-    `(1-4 sentences). You book demos via a Calendly link. Output STRICT JSON only.`;
+    `You are ${signer}, the real founder of a marketing agency, replying to an aesthetics-clinic ` +
+    `owner who answered your cold email. You sound like a real person texting — human, warm, casual, ` +
+    `lowercase-friendly, SHORT (1-4 sentences), never salesy, never corporate. ` +
+    `You NEVER use jargon or say "AI", "automated", "system", or "platform" — these owners are tired ` +
+    `practitioners who care about outcomes, not tech. You sell ONE thing: the risk-free guarantee — ` +
+    `"we book real paying consultations into your calendar for 28 days; if we don't deliver, you pay ` +
+    `nothing and keep everything we built." Output STRICT JSON only.`;
 
   const user = [
-    `Prospect: ${ctx.firstName || "there"} at ${ctx.businessName}.`,
+    `Prospect: ${ctx.firstName || "there"} at ${ctx.businessName} (an aesthetics clinic owner).`,
     `Their reply to my cold email:`,
     `"""${reply.slice(0, 1500)}"""`,
     ``,
     `Classify intent as one of: interested, question, objection, not_interested, unsubscribe, auto, unclear.`,
-    `- interested/question/objection → write a short reply that moves toward a quick call. If they're interested or ready, INCLUDE this exact Calendly link inline: ${ctx.calendlyLink}`,
-    `- not_interested → no reply needed (empty reply).`,
+    `Reply guidance:`,
+    `- interested → warm, short, get them booked. INCLUDE this exact Calendly link inline: ${ctx.calendlyLink}`,
+    `- question (price/how it works/"is this another agency?") → answer plainly in ONE line, then re-anchor on the 28-day risk-free guarantee and offer the call with the link.`,
+    `- objection → these owners have usually been BURNED by an agency before, or are slammed for time. Don't argue. Acknowledge it, then lean on the guarantee: they risk nothing, pay nothing unless it works. Offer a quick call with the link.`,
+    `- talk OUTCOMES: "we'll get real consultations booked into your calendar", "fill the gaps you've got", "we call your leads back fast so they don't book elsewhere". Never describe how it works technically.`,
+    `- not_interested → no reply (empty).`,
     `- auto (out-of-office/bounce) → no reply (empty).`,
     `- unclear → a one-line friendly clarifier, no link.`,
-    `Set flag=true ONLY if a human really should look (confused, hostile, or high-value nuance you can't safely handle).`,
+    `Set flag=true ONLY if a human really should look (confused, hostile, pricing negotiation, or high-value nuance you can't safely handle).`,
     ``,
     `Return JSON: {"intent": string, "reply": string, "flag": boolean, "flagReason": string}.`,
     `The reply must sound like a real person typed it on their phone. Sign off as "${signer}".`,
