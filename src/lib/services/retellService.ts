@@ -133,3 +133,150 @@ export async function updateRetellAgent(
     { maxAttempts: 3, baseDelayMs: 500, label: "retellService.updateRetellAgent" }
   );
 }
+
+// ── Agent provisioning (create-from-scratch) ────────────────────────────────────
+//
+// Retell models an agent in TWO objects:
+//   1. a "Retell LLM"  — holds the general_prompt + model + begin_message
+//   2. an "agent"      — binds that LLM (response_engine) to a voice + webhook
+// To create a dedicated agent you create the LLM first, then the agent that
+// references it. The prompt is later updated on the LLM (NOT the agent).
+
+/**
+ * Maps our internal voice aliases to real Retell voice IDs. Real Retell IDs
+ * (e.g. "11labs-Adrian") are passed through untouched. Unknown values fall back
+ * to a safe default so provisioning never fails on a bad alias.
+ */
+export function resolveRetellVoiceId(voiceId: string | null | undefined): string {
+  const DEFAULT = "11labs-Adrian";
+  if (!voiceId) return DEFAULT;
+  const v = voiceId.trim();
+  // Already a provider-prefixed Retell voice id — pass through.
+  if (v.includes("-") && /^(11labs|openai|deepgram|elevenlabs|play)/i.test(v)) return v;
+  const ALIASES: Record<string, string> = {
+    "female-british": "11labs-Lily",
+    "male-british":   "11labs-Oliver",
+    "female-us":      "11labs-Anna",
+    "male-us":        "11labs-Adrian",
+  };
+  return ALIASES[v.toLowerCase()] ?? DEFAULT;
+}
+
+interface CreateLlmParams {
+  generalPrompt: string;
+  beginMessage?: string;
+  model?:        string;
+}
+
+interface CreateLlmResponse {
+  llm_id: string;
+}
+
+/**
+ * Creates a Retell LLM holding the agent's system prompt.
+ * POST /create-retell-llm
+ */
+export async function createRetellLlm(params: CreateLlmParams): Promise<{ llmId: string }> {
+  const apiKey = getRetellApiKey();
+
+  const body: Record<string, unknown> = {
+    model:          params.model ?? "gpt-4o",
+    general_prompt: params.generalPrompt,
+  };
+  if (params.beginMessage) body.begin_message = params.beginMessage;
+
+  const data = await withRetry(
+    async () => {
+      const res = await fetch(`${RETELL_BASE_URL}/create-retell-llm`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body:    JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(
+          `Retell API error creating LLM: HTTP ${res.status} — ${errBody.message ?? "unknown"}`
+        );
+      }
+      return (await res.json()) as CreateLlmResponse;
+    },
+    { maxAttempts: 3, baseDelayMs: 500, label: "retellService.createRetellLlm" }
+  );
+
+  if (!data.llm_id) throw new Error("Retell create-llm returned no llm_id");
+  return { llmId: data.llm_id };
+}
+
+interface CreateAgentParams {
+  llmId:       string;
+  voiceId:     string;
+  agentName:   string;
+  webhookUrl?: string;
+  language?:   string;
+}
+
+interface CreateAgentResponse {
+  agent_id: string;
+}
+
+/**
+ * Creates a Retell agent bound to an existing Retell LLM.
+ * POST /create-agent
+ */
+export async function createRetellAgent(params: CreateAgentParams): Promise<{ agentId: string }> {
+  const apiKey = getRetellApiKey();
+
+  const body: Record<string, unknown> = {
+    response_engine: { type: "retell-llm", llm_id: params.llmId },
+    voice_id:        resolveRetellVoiceId(params.voiceId),
+    agent_name:      params.agentName,
+    language:        params.language ?? "en-GB",
+  };
+  if (params.webhookUrl) body.webhook_url = params.webhookUrl;
+
+  const data = await withRetry(
+    async () => {
+      const res = await fetch(`${RETELL_BASE_URL}/create-agent`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body:    JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(
+          `Retell API error creating agent: HTTP ${res.status} — ${errBody.message ?? "unknown"}`
+        );
+      }
+      return (await res.json()) as CreateAgentResponse;
+    },
+    { maxAttempts: 3, baseDelayMs: 500, label: "retellService.createRetellAgent" }
+  );
+
+  if (!data.agent_id) throw new Error("Retell create-agent returned no agent_id");
+  return { agentId: data.agent_id };
+}
+
+/**
+ * Updates the system prompt on a Retell LLM (the correct place — the prompt lives
+ * on the LLM, not the agent). PATCH /update-retell-llm/{llm_id}. Idempotent.
+ */
+export async function updateRetellLlmPrompt(llmId: string, generalPrompt: string): Promise<void> {
+  const apiKey = getRetellApiKey();
+
+  await withRetry(
+    async () => {
+      const res = await fetch(`${RETELL_BASE_URL}/update-retell-llm/${llmId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body:    JSON.stringify({ general_prompt: generalPrompt }),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(
+          `Retell API error updating LLM ${llmId}: HTTP ${res.status} — ${errBody.message ?? "unknown"}`
+        );
+      }
+    },
+    { maxAttempts: 3, baseDelayMs: 500, label: "retellService.updateRetellLlmPrompt" }
+  );
+}

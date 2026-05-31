@@ -27,6 +27,7 @@ export interface CallAnalysis {
 
 export interface VoiceLayer {
   retellAgentId:        string;
+  retellLlmId?:         string;   // Retell LLM that holds the general_prompt (set on provisioning)
   retellPhoneNumberId:  string;
   basePromptTemplateId: string;   // Which base template to use
   promptInjections:     PromptInjections;
