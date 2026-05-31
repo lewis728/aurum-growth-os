@@ -98,6 +98,11 @@ export function renderBriefBlock(brief: ClientBrief | null): string {
     objections ? `Objection responses:\n${objections}` : null,
     line("COMPLIANCE — never claim/say", brief.complianceNotes),
     line("Website summary", brief.websiteSummary),
+    // Kai's nightly distillation — what we've LEARNED about this specific client.
+    // Surfaced to every role so the whole team compounds knowledge over time.
+    brief.distilledLearnings
+      ? `WHAT WE'VE LEARNED ABOUT THIS CLIENT (updated nightly by Kai — act on these):\n${brief.distilledLearnings}`
+      : null,
   ];
 
   return parts.filter((p): p is string => p !== null).join("\n");

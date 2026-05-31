@@ -23,6 +23,26 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 6 — Kai, the nightly learner / THE MOAT (2026-05-31):**
+- Migration (prod via Supabase MCP): `ClientBrief.distilledLearnings` (Text),
+  `learningsUpdatedAt`.
+- `src/lib/agents/roles/learner.ts` — `runLearnerCycle(blueprintId, tenantId)`,
+  the 5th role (Kai). Reads last 30 days: lead status/stage mix, objection
+  frequencies (from `Lead.callAnalysis.objections`), show-rate by day+time-slot
+  (attended/total past appointments), booking rate, avg lead score, agent-action
+  mix → GPT-4o distils ≤15 sharp ACTIONABLE facts → `ClientBrief.distilledLearnings`.
+  Never throws. No-ops below 5 leads (won't fabricate patterns from thin data);
+  upserts the brief if missing.
+- Wired into `clientContext.renderBriefBlock` under "WHAT WE'VE LEARNED ABOUT THIS
+  CLIENT" — so EVERY role (caller/mediaBuyer/reporter via buildClientContext, and
+  the voice prompt via renderBriefBlock) reads Kai's facts. Compound learning.
+- Cron `/api/cron/nightly-learning` (CRON_SECRET-gated, Promise.allSettled,
+  maxDuration 300) + `vercel.json` `0 0 * * *`.
+- **Honest scope:** "creative performance" learning omitted — needs Meta
+  per-creative breakdown (Sprint 7). Slot patterns need ≥2 completed appointments.
+  Runtime-unverified until the midnight cron fires; logic tsc-clean. Pre-sprint
+  Vercel check: 0 errors.
+
 **Sprint 3B — Per-client CRM pipeline (2026-05-31):**
 - Migration (applied to prod via Supabase MCP): `Lead.pipelineStage` (default
   "new"), `convertedAt`, `dealValue`, + `@@index([tenantId, pipelineStage])`.

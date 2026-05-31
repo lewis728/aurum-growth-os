@@ -85,6 +85,9 @@ model ClientBrief {
   targetCplGbp           Float?    // the CPL/CPA the agent optimises toward
   complianceNotes        String?   // claims/words the agent must NEVER make — governs ads + calls
   websiteSummary         String?   // GPT-distilled summary of the scraped website
+  // ── Kai, the nightly learner (Sprint 6) ─────────────────────────────────────
+  distilledLearnings     String?   // ≤15 sharp, client-specific facts distilled nightly from outcomes; every role reads these
+  learningsUpdatedAt     DateTime? // when Kai last refreshed distilledLearnings
   reportingPreferences   String?
   clientContactName      String?
   clientContactEmail     String?
