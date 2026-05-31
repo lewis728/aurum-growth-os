@@ -463,3 +463,21 @@ model ClientMessage {
   @@index([blueprintId])
   @@index([tenantId, requiresApproval])
 }
+
+// ── CreativeSimulation ────────────────────────────────────────────────────────
+// Pre-flight 15-persona simulation of an ad creative before it spends client
+// money on Meta (Sprint 10C-B). passed=false blocks deployment.
+model CreativeSimulation {
+  id            String   @id @default(cuid())
+  blueprintId   String
+  tenantId      String
+  creativeId    String
+  personaScores Json     // array of { persona, score, objection, wouldConvert }
+  meanScore     Float
+  passed        Boolean
+  blockedReason String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([blueprintId])
+}

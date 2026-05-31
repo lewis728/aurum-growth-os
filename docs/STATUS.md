@@ -23,6 +23,21 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 10C-B — Pre-flight creative simulation (2026-05-31):**
+- Migration (prod via Supabase MCP): `CreativeSimulation` table {personaScores,
+  meanScore, passed, blockedReason}.
+- `creativeSimulator.simulateCreative(blueprintId, tenantId, creative)` — GPT-4o
+  role-plays 15 psychographic personas from the brief, scores click-prob 1-10 +
+  objection + wouldConvert; passes only if mean ≥7.5 AND no policy flag; persists
+  the row; returns objections for revision. **Fail-safe: NEVER auto-approves** —
+  any error/empty result → passed=false (never spend client money on an unproven
+  or un-simulatable angle).
+- `POST /api/creative/simulate` (tenant-scoped) makes it callable.
+- **Honest scope:** the engine + gate exist and are callable, but are NOT yet wired
+  as a hard pre-deploy gate in the orchestrator (Meta deploy is blocked on approval
+  anyway) and the Higgsfield-panel score display is deferred. Wire `simulateCreative`
+  before `createAdCreative` when creative auto-deploy goes live. tsc 0.
+
 **Sprint 10C — Phantom call-back loop + FSM states (2026-05-31):**
 - Migration (prod via Supabase MCP): `Lead.conversationState` (default INITIAL),
   `lastContactAt`, `reengageAttempts` + `(tenantId, conversationState)` index.
