@@ -23,6 +23,27 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 8 — Reporter role (Ava) — COMPLETES THE 5 ROLES (2026-05-31):**
+- `src/lib/agents/roles/reporter.ts` — `runReporterCycle(blueprintId, tenantId)`,
+  the 4th role. Reads what every OTHER role did (their AgentActions, via the
+  briefing's gather + risk/milestone queries) and produces:
+  1. the daily first-person morning briefing (delegates to the proven
+     `morningBriefingService` — migrated here as the role's reporting surface).
+  2. **at-risk detection** → `CLIENT_AT_RISK` AgentAction when ≥2 churn signals
+     fire (no leads 48h / lead volume down 40%+ WoW / show rate <40% over 2wk),
+     with a 3-day cooldown; auto-escalates to Slack via `maybeAlertForAction`.
+  3. **milestone detection** → `MILESTONE` AgentAction when total bookings cross
+     10/25/50/100/250/500 (only the cycle it's newly crossed).
+- `cron/morning-briefing` now runs the Reporter (was: briefing only); returns
+  generated/atRisk/milestones counts. Never throws.
+- **All 5 roles now exist**: caller, scheduler, mediaBuyer, reporter, learner.
+- **Honest scope (deferred, not faked):** weekly client WhatsApp needs
+  `twilioService.sendWhatsApp` (Sprint 10) — NOT built here. Monthly client report
+  already has its own generator+cron (Sprint 5) — not duplicated. CPL-spike risk
+  signal needs Meta breakdown data (live Meta) — the 3 computable signals are used;
+  CPL one added when Meta is connected. Runtime-unverified until the 6am cron runs;
+  tsc 0. Pre-sprint Vercel check: 0 errors.
+
 **Sprint 7 — Media Buyer role + 10× reasoning brain (2026-05-31):**
 - `metaAdsService`: new `getAdSetInsights`, `getAdInsights`, `getAudienceInsights`
   (age,gender + publisher_platform via two settled calls) + `MetaBreakdownRow`.
