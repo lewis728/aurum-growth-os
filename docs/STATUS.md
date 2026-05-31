@@ -1,0 +1,100 @@
+# Aurum Growth OS — Status & Handoff
+
+> Cold-start handoff. A fresh session or engineer should be able to pick up from
+> this file alone. **Read `CLAUDE.md` first** — it is the source of truth on stack,
+> auth pattern, design system, and working rules.
+
+## 1. What this project is
+AI fulfilment software for B2B marketing agencies. Each client gets a dedicated AI
+"employee" (Sophie/Marcus/etc.) that calls leads within 60s, manages Meta ads,
+books appointments, sends SMS, and reports to the agency owner.
+
+**Operator context:** the owner has never run ads. They intend to dogfood this
+building their own agency, then sell as SaaS. They have API keys but **no real
+clients yet**, and are **waiting on Meta app approval**. They are happy with a
+human-approval gate on anything that spends money.
+
+## 2. What's built & type-checked
+All of the below is committed and passes `npx tsc --noEmit` (0 errors).
+
+**Sprints 3–15:** Add-Client wizard + tiers, Retell 60s call trigger + retry,
+Twilio SMS sequences + no-show, live agent feed (Supabase realtime), tiered Stripe
+billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
+refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
+white-label branding, team seats/roles.
+
+**Build 1 — Dual Agent Architecture:**
+- `src/lib/agents/clientAgent.ts` — `runClientAgentCycle(blueprintId, tenantId)`,
+  per-client account manager; enforces budget hard limit + `NEEDS_APPROVAL` threshold.
+- `src/lib/agents/chiefOfStaff.ts` — `runChiefOfStaffCycle(tenantId)`, cross-portfolio
+  COO; writes `AgentAction` with `blueprintId: null`
+  (`PORTFOLIO_BRIEFING`, `CLIENT_AT_RISK`, `UPSELL_OPPORTUNITY`, `PORTFOLIO_INSIGHT`).
+- `agentReasoningService.ts` made brief-aware (shared engine, deliberately not forked
+  into a class).
+- New cron `/api/cron/portfolio-check` (vercel.json `0 */6 * * *`); `agent-reasoning`
+  now calls `runClientAgentCycle`.
+- `AgentAction.blueprintId` is now nullable (migration `20260531_add_client_brief_and_agency_fields`).
+
+**Client Context Engine:**
+- `src/lib/agents/clientContext.ts` — `buildClientContext(blueprintId)` assembles
+  business basics + `ClientBrief` into one `promptBlock` + guardrails. **Wired into
+  all 4 agent surfaces:** reasoning loop, client chat, creative generation, morning briefing.
+- `ClientBrief` model gained `targetCplGbp`, `complianceNotes`, `websiteSummary`
+  (migration `20260531_add_client_brief_knowledge_fields`).
+- Capture: `GET/PUT /api/clients/[blueprintId]/brief` (tenant-scoped) +
+  `ClientBriefPanel.tsx` editor in the sub-account.
+- Client-create seeds a starter `ClientBrief` from the website scrape.
+- `businessHours` was added then **removed** — it contradicted the core promise
+  (Sophie calls 24/7, unconditionally).
+
+## 3. What is NOT done / known gaps
+- **NOTHING has been verified at runtime.** Verification to date is `tsc --noEmit`
+  only. No call, SMS, GPT response, Stripe action, or realtime subscription has been
+  observed firing. The gap between "compiles" and "works" is the single biggest risk.
+- **Sprint 10 WhatsApp send is NOT implemented** — only `clientContactName` /
+  `clientWhatsApp` capture fields exist. `twilioService` has no `sendWhatsApp`; the
+  monthly-report cron does not message clients.
+- **Meta-dependent paths unverified** — spend/insights/campaign create/pause/scale.
+  Blocked on Meta app approval. The `getCampaignInsights` signature was already wrong
+  once and fixed; treat all Meta wiring as untrusted until exercised.
+- **Agent intelligence is shallow** — the reasoning loop is a ~5-rule CPL threshold
+  tree, not deep "why it's working" diagnosis. Real depth needs ad-set/creative/
+  audience breakdown data from Meta (not yet requested) + GPT reasoning over it.
+  `VerticalProfile` benchmarks are GPT *estimates* until real campaign data accumulates.
+- **Migrations need `prisma migrate deploy` in prod** (never `migrate dev` per CLAUDE.md).
+- **Clerk custom roles** (owner/manager/viewer) must be configured in the Clerk
+  dashboard or non-admin roles won't resolve.
+
+## 4. How to verify the core loop (needs only Retell + Twilio, NOT Meta)
+The core moment — lead → 60s call → SMS → booking — is testable without Meta, since
+Meta is only the lead *source* in prod. Flow:
+`POST /api/webhooks/leads/[blueprintId]` (HMAC-signed) → `speedToLeadService` →
+Retell `createPhoneCall` → post-call webhook `/api/webhooks/calls/[blueprintId]` →
+Twilio SMS + Appointment. Requires a LIVE blueprint and a tunnel (e.g. ngrok) for
+Retell's post-call webhook. This is the highest-value verification available pre-Meta.
+
+> Note: an earlier smoke-test harness (commit `c777c3c`) was reverted because it
+> referenced a non-existent script and contained a fabricated claim. If a smoke test
+> is wanted, build it fresh — reading every referenced file first. The seed-client
+> idea is sound (LIVE blueprint + brief under tenant `pending:smoke-test`); the
+> execution was rushed.
+
+## 5. Working discipline — failure modes to avoid
+1. **Never batch `git commit` in the same parallel tool block as the edits.** Parallel
+   calls have no ordering; the commit runs first, fails "nothing to commit," and
+   cancels the batch. One write per step; commit separately; verify `tsc` before every
+   commit and `git rev-parse HEAD == origin/main` after every push.
+2. **Edits silently fail** when `old_string` doesn't match the real file. After every
+   edit, grep to confirm the change actually applied **before** writing the commit message.
+3. **Read before referencing.** Do not assert facts about a file you haven't read
+   (CLAUDE.md rule #1). Two false claims shipped this way before being caught.
+4. Git/tsc/prisma commands here need `dangerouslyDisableSandbox: true`.
+
+## 6. Suggested next steps (priority order, per CLAUDE.md)
+1. **Prove the core loop** end-to-end on the operator's own phone (Retell + Twilio) —
+   converts the product from "compiles" to "fired once." Highest value, unblocked.
+2. Complete ClientBrief capture in the **onboarding wizard** (currently only in
+   sub-account + scrape seed).
+3. When Meta clears: breakdown-level insights + deeper GPT reasoning — the "knows
+   exactly why it's working" capability, which is the real differentiated product.
+4. Implement the deferred Sprint 10 WhatsApp send, or formally drop it from scope.
