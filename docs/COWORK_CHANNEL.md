@@ -81,6 +81,80 @@ Return JSON: { diagnosis, action, actionType, expectedOutcome, watchFor, confide
 
 ## REMAINING SPRINTS — BUILD IN ORDER
 
+### SPRINT 3C — Agent Team View (MISSED — BUILD BEFORE SPRINT 5)
+
+Each client sub-account must show the dedicated team working for that client. It should feel like opening a Slack channel and seeing your team online.
+
+**The team strip at the top of every client sub-account:**
+
+5 profile cards in a row. Each one represents one specialist role:
+
+Card 1 — THE CALLER (e.g. "Sophie")
+- Gold avatar circle with initials
+- Name in gold
+- Role: "Lead Caller"
+- Status dot: green if called a lead in last 4h, amber if last call was 4-24h ago, grey if inactive
+- Last action: "Called James Wright — Booked · 2h ago"
+- Click → opens chat with this agent
+
+Card 2 — THE SCHEDULER ("James")  
+- Blue avatar
+- Role: "Appointment Scheduler"
+- Status: green if appointment created in last 4h
+- Last action: "Booked consultation for Sarah Chen · 3h ago"
+
+Card 3 — THE MEDIA BUYER ("Marcus")
+- Purple avatar
+- Role: "Media Buyer"
+- Status: green if reasoning cycle ran in last 4h
+- Last action: "Scaled budget 20% — CPL tracking well · 4h ago"
+
+Card 4 — THE REPORTER ("Ava")
+- Pink avatar  
+- Role: "Account Reporter"
+- Status: green if briefing sent today
+- Last action: "Morning briefing sent · 6h ago"
+
+Card 5 — THE LEARNER ("Kai")
+- Zinc avatar
+- Role: "Intelligence"
+- Status: green if distillation ran last night
+- Last action: "Distilled 15 learnings · last night"
+
+**How to determine agent names:**
+- Caller: uses AIRepresentative.repName (already exists)
+- Scheduler: auto-assigned "James" (or next name from a curated pool)
+- Media Buyer: auto-assigned "Marcus"
+- Reporter: auto-assigned "Ava"  
+- Learner: always "Kai"
+
+Store auto-assigned names on AIRepresentative as schedulerName, mediaBuyerName, reporterName. Default to the names above if not set.
+
+**Below the team strip — a unified team activity feed:**
+
+Shows the last 20 actions from ALL roles interleaved chronologically. Each entry shows:
+- The agent's avatar (small, coloured circle with initial)
+- Agent name in their colour
+- What they did in plain English
+- Time ago
+
+Example:
+🟡 Sophie: Called James Wright — Booked appointment for Thursday 2pm · 2h ago
+🟣 Marcus: Scaled ad set budget from £40 to £48/day — CPL 28% below benchmark · 4h ago  
+🔵 James: Sent booking confirmation SMS to James Wright · 2h ago
+🩷 Ava: Sent morning briefing to Lewis · 6h ago
+⬛ Kai: Distilled 15 learnings — updated brief · 8h ago
+
+**This replaces the current "Recent activity" section in ClientSubAccount.tsx.**
+
+The agency owner opens a client and immediately sees their whole team, what each person is doing, and a live feed of everything happening. It feels like a real team, not software.
+
+Schema: add schedulerName String?, mediaBuyerName String?, reporterName String? to AIRepresentative. Migrate via Supabase MCP.
+
+After building: tsc clean, commit, push, then build Sprint 3B (CRM pipeline), then continue to Sprint 5.
+
+---
+
 ### SPRINT 3B — Per-Client CRM Pipeline (MISSED — BUILD BEFORE SPRINT 5)
 
 This was missing from Sprint 3. Build it now before continuing.
