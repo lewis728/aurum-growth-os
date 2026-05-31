@@ -30,6 +30,7 @@ import {
   JODI_FEMALE_VOICE_ID,
 } from "@/lib/services/retellService";
 import { assembleVoicePromptFromBrief } from "@/lib/services/retellPromptAssembler";
+import { provisionClientPhoneNumber } from "@/lib/services/phoneNumberService";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 export interface ProvisionResult {
@@ -144,6 +145,11 @@ export async function provisionClientAgent(
     await persistAgentToBlueprint(
       blueprintId, blueprintRow.voice, existingVoice.retellAgentId, existingVoice.retellLlmId, resolvedVoice, webhookUrl,
     );
+    // Dedicated caller ID (Sprint 14) — idempotent, best-effort. Picks up a number
+    // for a re-deployed client that didn't have one yet; no-ops if it already does.
+    await provisionClientPhoneNumber(blueprintId, existingVoice.retellAgentId).catch((e: unknown) =>
+      console.error("[provision] phone number provisioning failed:", e instanceof Error ? e.message : e),
+    );
     return { agentId: existingVoice.retellAgentId, llmId: existingVoice.retellLlmId, created: false };
   }
 
@@ -162,6 +168,12 @@ export async function provisionClientAgent(
     data:  { lastDeployedAt: new Date() },
   });
   await persistAgentToBlueprint(blueprintId, blueprintRow.voice, agentId, llmId, resolvedVoice, webhookUrl);
+
+  // Dedicated caller ID (Sprint 14) — best-effort, never blocks going LIVE. Falls
+  // back to the shared number if Twilio isn't configured or purchase fails.
+  await provisionClientPhoneNumber(blueprintId, agentId).catch((e: unknown) =>
+    console.error("[provision] phone number provisioning failed:", e instanceof Error ? e.message : e),
+  );
 
   return { agentId, llmId, created: true };
 }

@@ -346,6 +346,47 @@ export async function bindPhoneNumberToAgent(phoneNumber: string, agentId: strin
 }
 
 /**
+ * Imports a Twilio number we already own into Retell so it can place/receive
+ * calls for a specific client agent (Sprint 14). Uses Retell's BYO-Twilio import
+ * (Retell auto-configures the number via the Twilio credentials) and binds the
+ * client's agent for both directions. Returns Retell's phone_number_id, or null.
+ */
+export async function importTwilioNumberToRetell(opts: {
+  phoneNumber: string;
+  agentId:     string;
+  nickname?:   string;
+}): Promise<string | null> {
+  const apiKey = getRetellApiKey();
+  const sid    = process.env.TWILIO_ACCOUNT_SID;
+  const token  = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) throw new Error("Twilio credentials not configured for Retell import");
+
+  return withRetry(
+    async () => {
+      const res = await fetch(`${RETELL_BASE_URL}/import-phone-number`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body:    JSON.stringify({
+          phone_number:       opts.phoneNumber,
+          twilio_account_sid: sid,
+          twilio_auth_token:  token,
+          inbound_agent_id:   opts.agentId,
+          outbound_agent_id:  opts.agentId,
+          nickname:           opts.nickname,
+        }),
+      });
+      if (!res.ok) {
+        const rawErr = await res.text().catch(() => "");
+        throw new Error(`Retell import-phone-number failed: HTTP ${res.status} — ${rawErr || "no body"}`);
+      }
+      const data = (await res.json()) as { phone_number_id?: string };
+      return data.phone_number_id ?? null;
+    },
+    { maxAttempts: 2, baseDelayMs: 500, label: "retellService.importTwilioNumberToRetell" }
+  );
+}
+
+/**
  * Fetches a Retell LLM's current general_prompt. GET /get-retell-llm/{llm_id}.
  * Used to verify what prompt an agent is actually running. Returns null on error.
  */

@@ -97,6 +97,8 @@ model ClientBrief {
   // ── Editable comms templates (Sprint 3D) ────────────────────────────────────
   smsTemplates           Json?     // { bookedConfirmation, dayBefore, hourBefore, qualifiedNudge, noShow } — owner-edited, agency-brand
   callScriptOverride     String?   // owner-edited Sophie call script; pushed live to the Retell LLM on save
+  // ── Competitor intelligence (Sprint 15) ─────────────────────────────────────
+  competitorIntel        Json?     // rolling array of up to 4 weekly snapshots (newest first)
   clientContactName      String?
   clientContactEmail     String?
   clientWhatsApp         String?
@@ -285,6 +287,9 @@ model VerticalProfile {
   offerStructure            String
   callScriptNotes           String
   performanceData           Json     @default("{}")
+  // ── Weekly expert brief (Sprint 13) ─────────────────────────────────────────
+  expertBrief               String?   // ≤2000-word 30-year-expert brief; read by every agent in this vertical
+  lastTrainedAt             DateTime? // when the vertical trainer last refreshed expertBrief
   lastUpdated               DateTime @updatedAt
 
   @@index([vertical])
@@ -447,6 +452,9 @@ model AIRepresentative {
   schedulerName          String?
   mediaBuyerName         String?
   reporterName           String?
+  // ── Per-client dedicated caller ID (Sprint 14) ──────────────────────────────
+  twilioPhoneNumber       String?  // dedicated UK number purchased at Deploy Sophie
+  retellPhoneNumberId     String?  // Retell's id for the imported number
   lastDeployedAt          DateTime?
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt

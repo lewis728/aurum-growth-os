@@ -76,7 +76,7 @@ export async function provisionClientPhoneNumber(
   try {
     const rep = await prisma.aIRepresentative.findUnique({
       where:  { blueprintId },
-      select: { name: true, twilioPhoneNumber: true },
+      select: { repName: true, twilioPhoneNumber: true },
     });
 
     // Idempotency: already has a dedicated number.
@@ -102,7 +102,7 @@ export async function provisionClientPhoneNumber(
       phoneNumberId = await importTwilioNumberToRetell({
         phoneNumber: purchased,
         agentId,
-        nickname:    rep?.name ? `${rep.name} · ${blueprintId}` : blueprintId,
+        nickname:    rep?.repName ? `${rep.repName} · ${blueprintId}` : blueprintId,
       });
     } catch (err) {
       // The number is bought but Retell import failed — persist it anyway so we

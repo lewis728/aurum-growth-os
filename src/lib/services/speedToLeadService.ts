@@ -11,6 +11,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createPhoneCall, toE164 } from "@/lib/services/retellService";
+import { resolveClientFromNumber } from "@/lib/services/phoneNumberService";
 import { buildClientContext } from "@/lib/agents/clientContext";
 import { callFrameForTier, type LeadTier } from "@/lib/services/leadEnrichmentService";
 import { CampaignStatus } from "@/enums/campaignEnums";
@@ -120,7 +121,8 @@ export async function placeSpeedToLeadCall(opts: {
     .catch((e: unknown) => console.error("[speedToLead] callAttempts increment failed:", e));
 
   try {
-    const fromNumber = process.env.RETELL_FROM_NUMBER;
+    // Sprint 14: prefer the client's dedicated number, fall back to the shared one.
+    const fromNumber = await resolveClientFromNumber(blueprintId);
     const agentId =
       (blueprint.voice as { retellAgentId?: string } | null)?.retellAgentId ||
       process.env.RETELL_AGENT_ID;
