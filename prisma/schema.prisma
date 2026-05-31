@@ -553,3 +553,55 @@ model ProspectResearch {
   @@index([tenantId])
   @@index([tenantId, createdAt])
 }
+
+// ── Outreach (cold-email engine) ──────────────────────────────────────────────
+// Lewis's outbound: Clay/Apollo intake → 2-stage ICP qualify → adversarial
+// (writer→critic) personalised hook → 5-email sequence → push to Instantly.
+// tenantId added per CLAUDE.md ("every model needs tenantId") — multi-tenant safe.
+model OutreachProspect {
+  id               String   @id @default(cuid())
+  tenantId         String
+  firstName        String?
+  lastName         String?
+  companyName      String
+  cleanCompanyName String?  // suffix-stripped, human-looking (LLC/Inc/Ltd removed)
+  website          String
+  websiteDomain    String?  // normalised host for dedup
+  vertical         String   @default("aesthetics")
+  location         String?
+  contactEmail     String?
+  status           String   @default("pending") // pending|qualifying|rejected|generated|emailing|replied|booked|closed
+  source           String   @default("manual")  // manual|apollo_csv|clay
+  customHook       String?  @db.Text
+  fitScore         Int?     // 0-100 ICP fit from the qualifier
+  qualified        Boolean?
+  qualifyReason    String?  @db.Text
+  instantlyLeadId  String?  // id returned by Instantly on inject
+  attempts         Int      @default(0)  // qualify/generate attempts — caps the retry loop
+  emailsSent       Int      @default(0)
+  lastEmailAt      DateTime?
+  repliedAt        DateTime?
+  bookedAt         DateTime?
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  sequences        OutreachSequence[]
+
+  @@unique([tenantId, websiteDomain])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([vertical])
+}
+
+model OutreachSequence {
+  id          String   @id @default(cuid())
+  prospectId  String
+  emailNumber Int
+  subject     String
+  body        String   @db.Text
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  prospect    OutreachProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId])
+}

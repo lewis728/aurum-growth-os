@@ -17,6 +17,7 @@ import { LiveAgentFeed } from "@/components/dashboard/LiveAgentFeed";
 import BrandingConfig from "@/components/onboarding/BrandingConfig";
 import { TeamSettings } from "@/components/dashboard/TeamSettings";
 import { ProspectResearch } from "@/components/dashboard/ProspectResearch";
+import { OutreachConsole } from "@/components/dashboard/OutreachConsole";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ClientSummary {
@@ -87,6 +88,7 @@ function Sidebar({ activePage, onNavigate }: { activePage: string; onNavigate: (
     { id: "clients",   label: "Clients",     icon: "◎" },
     { id: "campaigns", label: "Campaigns",   icon: "▶" },
     { id: "prospects", label: "Win clients", icon: "✦" },
+    { id: "outreach",  label: "Outreach",    icon: "✉" },
   ];
   const navIntel = [
     { id: "leads",     label: "Leads",    icon: "↓" },
@@ -662,6 +664,8 @@ function DashboardView() {
                 return <ClientOverview />;
               case "prospects":
                 return <ProspectResearch />;
+              case "outreach":
+                return <OutreachConsole />;
               case "settings":
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
