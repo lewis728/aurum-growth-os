@@ -7,7 +7,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "fire-lead": "tsx scripts/fire-test-lead.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
@@ -40,6 +41,7 @@
     "prisma": "^7.8.0",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.3",
     "typescript": "^5"
   }
 }
