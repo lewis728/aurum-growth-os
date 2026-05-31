@@ -90,16 +90,35 @@ Retell's post-call webhook. This is the highest-value verification available pre
    (CLAUDE.md rule #1). Two false claims shipped this way before being caught.
 4. Git/tsc/prisma commands here need `dangerouslyDisableSandbox: true`.
 
-## 6. Suggested next steps (priority order, per CLAUDE.md)
-1. **Prove the core loop** end-to-end on the operator's own phone (Retell + Twilio) —
-   converts the product from "compiles" to "fired once." Highest value, unblocked.
-2. Complete ClientBrief capture in the **onboarding wizard** (currently only in
-   sub-account + scrape seed).
-3. When Meta clears: breakdown-level insights + deeper GPT reasoning — the "knows
-   exactly why it's working" capability, which is the real differentiated product.
-4. Implement the deferred Sprint 10 WhatsApp send, or formally drop it from scope.
+## 6. Test backlog — still to verify at runtime
 
-## 7. ⚠️ TEMP overrides to restore before launch
+The core loop is proven (§2a). These remain unverified:
+- **Real Retell call completing and firing the post-call webhook automatically** —
+  so far the post-call leg was proven via a *simulated* signed payload
+  (`npm run fire-postcall`). Need a real call where Retell itself POSTs
+  `/api/webhooks/calls/[blueprintId]`. **Requires the Retell agent's webhook URL +
+  signing secret to be configured to match `RETELL_WEBHOOK_SECRET`.** (Could not be
+  verified from here — no Retell dashboard/API access.)
+- **Google Calendar booking** — `createCalendarEvent` is wired into the booking path
+  but skips (logs a warning) unless the tenant has a Google Calendar OAuth
+  connection. Needs OAuth connected, then a booking, to confirm the event lands.
+- **Morning briefing delivery at 6am** — `morningBriefingService` + the 6am cron are
+  built but never observed running. Verify it generates + stores `lastBriefingText`
+  and shows in the client sub-account.
+- **Reminders cron firing day-before & hour-before SMS** — the 3 reminder rows are
+  queued (proven), but `/api/cron/reminders` sending them on schedule is untested.
+  The immediate confirmation reminder (`sendAt` = now) is the quickest check.
+
+## 8. Later build priorities (per CLAUDE.md, once testing settles)
+1. Complete ClientBrief capture in the **onboarding wizard** (done — see the
+   `/onboard/[blueprintId]` flow; verify it at runtime).
+2. When Meta clears: breakdown-level insights + deeper GPT reasoning — the "knows
+   exactly why it's working" capability, the real differentiated product.
+3. Implement the deferred Sprint 10 WhatsApp send, or formally drop it from scope.
+4. God Mode portfolio dashboard (surface the chief-of-staff `blueprintId: null`
+   actions, which currently render nowhere).
+
+## 9. ⚠️ TEMP overrides to restore before launch
 
 The subscription/billing gate is **disabled** for the solo test environment (no
 Stripe connected). **These MUST be restored before opening to paying customers** —
