@@ -23,6 +23,33 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 7 — Media Buyer role + 10× reasoning brain (2026-05-31):**
+- `metaAdsService`: new `getAdSetInsights`, `getAdInsights`, `getAudienceInsights`
+  (age,gender + publisher_platform via two settled calls) + `MetaBreakdownRow`.
+  Built to the Graph API v20.0 contract; throw on hard failure, [] on no rows.
+- `src/lib/agents/roles/mediaBuyer.ts` — `runMediaBuyerCycle` ("Marcus"), the 3rd
+  role, replacing the 5-rule CPL tree with a 5-step brain:
+  1. OBSERVE — campaign + ad-set + ad + audience breakdowns (Promise.allSettled).
+  2. DIAGNOSE — GPT-4o causal reasoning over all data + the brief + **Kai's
+     distilledLearnings** (via `ctx.promptBlock`) + vertical benchmark → JSON
+     {diagnosis, action, actionType, expectedOutcome, watchFor, confidence}.
+  3. DECIDE — guardrails AFTER GPT: never exceed `budgetHardLimit`; change >
+     `approvalThreshold` → NEEDS_APPROVAL (no execute); confidence < 0.7 →
+     recommendation only; one action/cycle.
+  4. ACT — execute the single action (pause / +20% budget capped).
+  5. LOG — AgentAction with the full plain-English reasoning chain + Slack alert.
+- Fail-safe: if GPT is unavailable/parse-fails, falls back to the proven
+  deterministic engine (`agentReasoningService`) so a campaign is never unmanaged.
+  If even campaign-level Meta is unreachable → logs META_UNAVAILABLE, no changes.
+- `clientAgent.runClientAgentCycle` is now a thin delegate to the media buyer role
+  (cron unchanged); `agentReasoningService` retained as the fallback engine.
+- **Honest scope:** RECOMMEND_CREATIVE_REFRESH / FLAG_LOW_CTR are advisory (no Meta
+  mutation exists for them). `VerticalProfile.expertBrief` referenced by the brief
+  does NOT exist yet (Sprint 13) — not invented early; Marcus uses Kai's learnings +
+  the existing CPL benchmark for now. Runtime-unverified: needs a live Meta
+  connection (blocked on Meta approval) — degrades safely to META_UNAVAILABLE until
+  then. Pre-sprint Vercel check: 0 errors. tsc 0.
+
 **Sprint 6 — Kai, the nightly learner / THE MOAT (2026-05-31):**
 - Migration (prod via Supabase MCP): `ClientBrief.distilledLearnings` (Text),
   `learningsUpdatedAt`.

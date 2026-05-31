@@ -2,27 +2,27 @@
  * src/lib/agents/clientAgent.ts
  * SERVER-SIDE ONLY.
  *
- * The Client Account-Manager agent — a dedicated agent per client (blueprint).
- * It manages ONE client's advertising: it reads that client's full context
- * (business basics + ClientBrief, via the Client Context Engine) at the start of
- * every cycle and runs the autonomous Meta reasoning loop within the brief's
- * guardrails (budget hard limit, approval threshold, target CPL).
+ * The per-client account manager — the agent that manages ONE client's campaign.
+ * This is the "Client Agent" half of the dual-agent architecture (the other half
+ * is the Chief of Staff, chiefOfStaff.ts).
  *
- * Scope: blueprintId only. It never reads another client's data.
- * Persona: "{agentName}, a dedicated account manager for {businessName}."
- *
- * The Meta decision tree lives in agentReasoningService.runAgentReasoningCycle
- * (the shared engine); this module owns context-fetching + guardrail injection so
- * the engine and the chat surface stay in sync.
+ * As of Sprint 7 the reasoning logic lives in the MEDIA BUYER role
+ * (roles/mediaBuyer.ts) — the 5-step OBSERVE→DIAGNOSE→DECIDE→ACT→LOG brain.
+ * This file is now a thin delegate kept for backward-compatibility (the
+ * agent-reasoning cron + any callers still import runClientAgentCycle).
  */
-import {
-  runAgentReasoningCycle,
-  type ClientBriefGuardrails,
-} from "@/lib/services/agentReasoningService";
-import { buildClientContext } from "@/lib/agents/clientContext";
+
+import { runMediaBuyerCycle } from "@/lib/agents/roles/mediaBuyer";
+
+export interface ClientAgentResult {
+  blueprintId: string;
+  ran:         boolean;
+  reason?:     string;
+}
 
 /**
  * The Client Agent persona line. Shared by the reasoning loop + client chat.
+ * (Retained here — imported by the agent chat route.)
  */
 export function clientAgentPersona(agentName: string, businessName: string): string {
   return (
@@ -33,28 +33,13 @@ export function clientAgentPersona(agentName: string, businessName: string): str
 }
 
 /**
- * Runs one reasoning cycle for a single client, scoped to blueprintId.
- * Pulls the full client context, derives guardrails, and delegates to the shared
- * Meta decision engine. Never throws — failures are logged.
+ * Runs one reasoning cycle for a single client (blueprint) by delegating to the
+ * media buyer role. Never throws — runMediaBuyerCycle never throws.
  */
 export async function runClientAgentCycle(
   blueprintId: string,
   tenantId: string
-): Promise<void> {
-  try {
-    const context = await buildClientContext(blueprintId);
-
-    const guardrails: ClientBriefGuardrails = {
-      budgetHardLimitGbp:   context.guardrails.budgetHardLimitGbp,
-      approvalThresholdGbp: context.guardrails.approvalThresholdGbp,
-      briefText:            context.promptBlock,
-    };
-
-    await runAgentReasoningCycle(blueprintId, tenantId, guardrails);
-  } catch (err) {
-    console.error(
-      `[clientAgent] cycle failed for blueprint ${blueprintId}:`,
-      err instanceof Error ? err.message : err
-    );
-  }
+): Promise<ClientAgentResult> {
+  const result = await runMediaBuyerCycle(blueprintId, tenantId);
+  return { blueprintId, ran: true, reason: result.status };
 }

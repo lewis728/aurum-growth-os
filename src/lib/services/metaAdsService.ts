@@ -513,3 +513,139 @@ export async function updateCampaignBudget(
     }
   );
 }
+
+// ── Breakdown insights (Sprint 7 — the media buyer's OBSERVE step) ───────────────
+//
+// Normalised insights at campaign / ad-set / ad level + audience breakdowns
+// (age,gender and publisher_platform). Built on the existing metaGet + tenant
+// token helpers. Throw on hard failure (caller catches); [] when Meta has no rows.
+
+export interface MetaBreakdownRow {
+  level:              "campaign" | "adset" | "ad" | "audience";
+  id:                 string | null;   // adset_id / ad_id when level-scoped
+  name:               string | null;   // adset_name / ad_name
+  spend:              number;
+  impressions:        number;
+  clicks:             number;
+  ctr:                number;
+  leads:              number;
+  cpl:                number;           // spend / leads (0 when no leads)
+  age?:               string;
+  gender?:            string;
+  publisherPlatform?: string;
+}
+
+interface RawInsightRow {
+  spend?:              string;
+  impressions?:        string;
+  clicks?:             string;
+  ctr?:                string;
+  actions?:            Array<{ action_type: string; value: string }>;
+  adset_id?:           string;
+  adset_name?:         string;
+  ad_id?:              string;
+  ad_name?:            string;
+  age?:                string;
+  gender?:             string;
+  publisher_platform?: string;
+}
+
+function parseInsightRow(row: RawInsightRow, level: MetaBreakdownRow["level"]): MetaBreakdownRow {
+  const spend       = Number.parseFloat(row.spend ?? "0") || 0;
+  const impressions = Number.parseInt(row.impressions ?? "0", 10) || 0;
+  const clicks      = Number.parseInt(row.clicks ?? "0", 10) || 0;
+  const ctr         = Number.parseFloat(row.ctr ?? "0") || 0;
+  const leadAction  = row.actions?.find(
+    (a) => a.action_type === "lead" || a.action_type === "onsite_conversion.lead_grouped"
+  );
+  const leads       = leadAction ? Number.parseInt(leadAction.value, 10) || 0 : 0;
+  return {
+    level,
+    id:   row.ad_id ?? row.adset_id ?? null,
+    name: row.ad_name ?? row.adset_name ?? null,
+    spend, impressions, clicks, ctr, leads,
+    cpl: leads > 0 ? spend / leads : 0,
+    ...(row.age != null ? { age: row.age } : {}),
+    ...(row.gender != null ? { gender: row.gender } : {}),
+    ...(row.publisher_platform != null ? { publisherPlatform: row.publisher_platform } : {}),
+  };
+}
+
+async function fetchInsightRows(
+  campaignId: string,
+  tenantId: string,
+  dateRange: { since: string; until: string },
+  opts: { level?: "adset" | "ad"; breakdowns?: string; label: string },
+): Promise<RawInsightRow[]> {
+  const { accessToken } = await getTenantMetaIds(tenantId);
+  const fields = [
+    "spend", "impressions", "clicks", "ctr", "actions",
+    ...(opts.level === "adset" ? ["adset_id", "adset_name"] : []),
+    ...(opts.level === "ad"    ? ["ad_id", "ad_name"] : []),
+  ].join(",");
+  const params: Record<string, string> = {
+    fields,
+    time_range: JSON.stringify(dateRange),
+    level: opts.level ?? "campaign",
+    limit: "50",
+  };
+  if (opts.breakdowns) params.breakdowns = opts.breakdowns;
+
+  const data = await withRetry(
+    () => metaGet<{ data: RawInsightRow[] }>(`/${campaignId}/insights`, params, accessToken),
+    { maxAttempts: 3, baseDelayMs: 500, label: `metaAdsService.${opts.label}` },
+  );
+  return data.data ?? [];
+}
+
+/** Normalised campaign-level summary (single row). */
+export async function getCampaignInsightsSummary(
+  campaignId: string,
+  dateRange: { since: string; until: string },
+  tenantId: string,
+): Promise<MetaBreakdownRow> {
+  const rows = await fetchInsightRows(campaignId, tenantId, dateRange, { label: "getCampaignInsightsSummary" });
+  return rows[0]
+    ? parseInsightRow(rows[0], "campaign")
+    : { level: "campaign", id: campaignId, name: null, spend: 0, impressions: 0, clicks: 0, ctr: 0, leads: 0, cpl: 0 };
+}
+
+/** Per-ad-set performance for a campaign. */
+export async function getAdSetInsights(
+  campaignId: string,
+  dateRange: { since: string; until: string },
+  tenantId: string,
+): Promise<MetaBreakdownRow[]> {
+  const rows = await fetchInsightRows(campaignId, tenantId, dateRange, { level: "adset", label: "getAdSetInsights" });
+  return rows.map((r) => parseInsightRow(r, "adset"));
+}
+
+/** Per-ad (creative) performance for a campaign. */
+export async function getAdInsights(
+  campaignId: string,
+  dateRange: { since: string; until: string },
+  tenantId: string,
+): Promise<MetaBreakdownRow[]> {
+  const rows = await fetchInsightRows(campaignId, tenantId, dateRange, { level: "ad", label: "getAdInsights" });
+  return rows.map((r) => parseInsightRow(r, "ad"));
+}
+
+/**
+ * Audience breakdown: demographics (age + gender) and placement
+ * (publisher_platform) as two calls — Meta won't combine these breakdown
+ * families. Each settles independently; a partial result is fine.
+ */
+export async function getAudienceInsights(
+  campaignId: string,
+  dateRange: { since: string; until: string },
+  tenantId: string,
+): Promise<{ demographics: MetaBreakdownRow[]; placements: MetaBreakdownRow[] }> {
+  const [demo, place] = await Promise.allSettled([
+    fetchInsightRows(campaignId, tenantId, dateRange, { breakdowns: "age,gender", label: "getAudienceInsights(demo)" }),
+    fetchInsightRows(campaignId, tenantId, dateRange, { breakdowns: "publisher_platform", label: "getAudienceInsights(placement)" }),
+  ]);
+  return {
+    demographics: demo.status === "fulfilled" ? demo.value.map((r) => parseInsightRow(r, "audience")) : [],
+    placements:   place.status === "fulfilled" ? place.value.map((r) => parseInsightRow(r, "audience")) : [],
+  };
+}
