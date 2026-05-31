@@ -81,6 +81,49 @@ Return JSON: { diagnosis, action, actionType, expectedOutcome, watchFor, confide
 
 ## REMAINING SPRINTS — BUILD IN ORDER
 
+### SPRINT 3B — Per-Client CRM Pipeline (MISSED — BUILD BEFORE SPRINT 5)
+
+This was missing from Sprint 3. Build it now before continuing.
+
+In each client sub-account, replace the basic leads table with a proper pipeline board.
+
+**Pipeline stages:** new → called → qualified → booked → showed → converted
+**Sub-states:** no_answer, no_show, not_interested, retry_queue
+
+**Each lead card shows:**
+- Name, phone, lead score dot (green 7-10, amber 4-6, red 1-3)
+- Time in current stage
+- Last action Sophie took
+- Next scheduled action
+
+**Leads move automatically** based on AgentActions and appointment outcomes — no manual moving ever.
+
+**Click a lead card → expand to show:**
+- Full timeline of every AgentAction for this lead
+- Call transcript (from callAnalysis if available)
+- All SMS sent
+- Appointment details
+- Which ad/campaign drove this lead (source field)
+
+**Schema additions** (via Supabase MCP only — never prisma migrate dev):
+- Lead: pipelineStage String @default("new"), convertedAt DateTime?, dealValue Float?, source String?
+- Lead: add @@index([tenantId, pipelineStage])
+
+**Pipeline auto-movement logic:**
+- Lead created → pipelineStage = "new"
+- CALL_INITIATED AgentAction → pipelineStage = "called"
+- CALL_FAILED (no answer) → pipelineStage = "no_answer"
+- Appointment created → pipelineStage = "booked"
+- Appointment scheduledAt passes, status = "confirmed" → pipelineStage = "showed"
+- Appointment status = "no_show" → pipelineStage = "no_show"
+- Agency owner marks converted → pipelineStage = "converted", dealValue set
+
+**God Mode dashboard** should show total pipeline value across all clients (sum of booked × averageClientValue)
+
+After building: tsc clean, commit, push, then continue to Sprint 5.
+
+---
+
 ### SPRINT 4 — Slack Alerting
 Create src/lib/services/alertService.ts
 - notifySlack(webhookUrl, alert) — POST to agency's Slack webhook
