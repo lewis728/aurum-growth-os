@@ -796,6 +796,23 @@ Migrate both via Supabase MCP.
 
 After building: tsc clean, run `npm run train:quick` to verify it executes and produces a scorecard, commit and push.
 
+**THREE CRITICAL FIXES to apply when building:**
+
+Fix 1 — Grader bias: Replace the grader system prompt with this adversarial version:
+"You are a brutally honest sales manager with 20 years running call centres. You are NOT lenient. Find every moment where Sophie would have lost a real booking. Penalise heavily for: vague language, not getting a specific date/time, letting the lead control the conversation, any hint of desperation, any compliance violation. A score of 80+ means this script works on a real human actively trying to avoid booking."
+
+Fix 2 — Prompt bloat: In refineScript(), replace append approach with full rewrite:
+"Rewrite this script from scratch. Use the failures as hard constraints. Maximum 800 tokens. Every sentence must earn its place. If a section doesn't directly improve booking rate — cut it."
+Add hard token check: if refined script > 800 tokens, force another compression pass before returning.
+
+Fix 3 — Cost control: Add --dry-run flag to trainingRunner.ts that logs what WOULD run without API calls. Before any real run, print: "This will make approximately X API calls, estimated cost £Y. Continue? (y/n)"
+Add to package.json: "train:estimate": "tsx src/lib/training/trainingRunner.ts --dry-run"
+
+Run cadence (important — not on every save):
+- Pre-prompt-change: npm run train:quick (~£2)
+- Nightly 3am cron: 5 scenarios per vertical (~£5/night)  
+- Pre-release: npm run train (full 2000 scenarios, ~£40-60, weekly max)
+
 ---
 
 ## Questions from Claude Code

@@ -22,7 +22,7 @@
  */
 
 import { openai, OPENAI_MODEL } from "@/lib/services/openaiClient";
-import { metaGet } from "@/lib/services/metaInsightsService";
+import { searchAdLibrary, summariseAds } from "@/lib/services/metaAdLibrary";
 import { getVerticalBenchmark, upsertVerticalBenchmark } from "@/lib/services/verticalBenchmarkService";
 import { VERTICAL_LABELS } from "@/lib/constants/verticals";
 

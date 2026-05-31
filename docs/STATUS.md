@@ -51,6 +51,22 @@ white-label branding, team seats/roles.
   aesthetics-adjacent verticals; the rest fall through to solid generic defaults
   (not 20 bespoke sets). Runtime-unverified. tsc 0.
 
+**Sprint 14 — Per-Client Twilio Number (2026-05-31, branch `sprints-13-17`):**
+- Migration: `AIRepresentative.twilioPhoneNumber` + `retellPhoneNumberId` (Text).
+- `src/lib/services/phoneNumberService.ts` — `provisionClientPhoneNumber(blueprintId,
+  agentId)`: idempotent (guards on existing number, never buys twice), searches GB
+  mobile + purchases via Twilio REST, imports into Retell (BYO-Twilio) bound to the
+  client agent, persists number + Retell id. NEVER THROWS; graceful fallback to the
+  shared number when Twilio unconfigured / none available / import fails (number is
+  still saved on partial success so we never re-purchase). Plus `resolveClientFromNumber`.
+- `retellService.importTwilioNumberToRetell` — POST `/import-phone-number`
+  (twilio_account_sid/auth_token + inbound/outbound agent), returns phone_number_id.
+- Deploy Sophie (`agentProvisioning`) calls it best-effort after the agent goes LIVE;
+  `ProvisionResult.phoneNumber` surfaces the outcome.
+- Both call sites (`placeSpeedToLeadCall`, `placeRetellRetryCall`) now resolve the
+  client's dedicated number first, falling back to `RETELL_FROM_NUMBER`.
+- Runtime-unverified (no Twilio purchase/Retell import run from this env). tsc 0.
+
 **Sprint 13 — Vertical Training System (2026-05-31, branch `sprints-13-17`):**
 - `src/lib/agents/verticalTrainer.ts` — `trainVertical(vertical)` + `trainAllVerticals()`.
   Per vertical: (1) graceful Meta Ad Library scrape of live GB ads
