@@ -262,6 +262,60 @@ Create src/lib/agents/roles/communicator.ts
 - Event triggered: 10 bookings milestone, CPL improvement, campaign concern
 - Cron: 0 9 * * 1
 
+### SPRINT 10B — Pro Media Buyer Intelligence (BUILD BEFORE SPRINT 11)
+
+The current media buyer checks CPL and CTR. A real pro media buyer thinks about much more. Add this intelligence to mediaBuyer.ts and the Meta Insights calls.
+
+**1. Learning phase detection**
+When Meta returns a campaign/ad set, check the `effective_status` field:
+- If status is "LEARNING" — do NOT make any changes. Log AgentAction: "Ad set in learning phase — no changes made. Waiting for 50 conversion events before optimising."
+- If status is "LEARNING_LIMITED" — flag to agency owner: "Ad set stuck in learning — audience may be too narrow or budget too low"
+- Only act on ACTIVE ad sets that have exited learning
+
+Add to getAdSetInsights: request `effective_status`, `learning_stage_info` fields from Meta API
+
+**2. Frequency monitoring**
+Add `frequency` to the Meta Insights fields requested. 
+- Frequency > 2.0 AND CTR declining → creative fatigue confirmed (not just CTR drop)
+- Frequency > 3.0 → pause creative immediately, flag for replacement
+- Log: "Pausing [ad name] — frequency hit 3.1, audience has seen this ad too many times"
+
+**3. Budget pacing check**
+Request `spend` broken down by hourly delivery (Meta supports this with time_increment=1).
+- If 70%+ of daily budget spent by midday → audience too narrow or bid too aggressive
+- Flag: "Budget front-loading detected — consider broadening audience or reducing bid cap"
+
+**4. Campaign structure reasoning**
+In the GPT-4o diagnostic prompt, add these rules to the system prompt:
+- "Never recommend changes to ad sets in LEARNING status — explain why"
+- "Flag if more than 5 ad sets are running simultaneously — audience overlap risk"  
+- "Recommend consolidating underperforming ad sets rather than just pausing them"
+- "Consider 3-day and 7-day attribution windows, not just today's data"
+
+**5. Attribution window context**
+When pulling insights, always pull both:
+- `action_attribution_windows: ["1d_click", "7d_click"]`
+- Compare 1-day vs 7-day — if 7-day is much higher, leads are taking longer to convert (consideration product)
+- This affects how aggressive to be with scaling
+
+**6. The pro reasoning context injected into GPT-4o:**
+
+Add this to the mediaBuyer system prompt:
+"You are a Meta ads expert with 30 years experience. You know:
+- Never touch a campaign in LEARNING phase (needs 50 conversions to exit)
+- Frequency above 2.5 means creative fatigue, above 3.0 means pause immediately  
+- Budget front-loading (70%+ spent by midday) means audience is too narrow
+- 7-day attribution is more reliable than 1-day for high-ticket services
+- Audience overlap between ad sets wastes budget — consolidate not multiply
+- CPM rising week-on-week with same audience = audience saturation
+- Strong hook rate (3s video views/impressions > 25%) but low CTR = body copy problem
+- Low hook rate = creative opening isn't stopping the scroll
+- Always check if underperformance is campaign issue vs external (seasonality, competitor surge)"
+
+After building: tsc clean, commit, push, then continue to Sprint 11.
+
+---
+
 ### SPRINT 11 — Volume Pricing in Stripe
 - 1-5 clients: £500/mo, 6-10: £400/mo, 11-20: £350/mo, 21+: £300/mo
 - Platform fee £97/mo always
