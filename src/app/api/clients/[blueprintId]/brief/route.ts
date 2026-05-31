@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { parseSmsTemplates } from "@/lib/services/smsTemplates";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ const STRING_FIELDS = [
   "idealCustomerProfile", "badLeadSignals", "qualificationQuestions", "brandTone",
   "keyUSPs", "competitorNames", "reportingPreferences", "complianceNotes",
   "websiteSummary", "clientContactName", "clientContactEmail", "clientWhatsApp",
+  "callScriptOverride",
 ] as const;
 
 // Numeric fields accepted on PUT.
@@ -84,6 +86,10 @@ export async function PUT(
   }
   if ("objectionResponses" in body && body.objectionResponses != null) {
     data.objectionResponses = body.objectionResponses as Prisma.InputJsonValue;
+  }
+  // Sprint 3D: editable SMS templates (validated to known string keys).
+  if ("smsTemplates" in body && body.smsTemplates != null) {
+    data.smsTemplates = parseSmsTemplates(body.smsTemplates) as Prisma.InputJsonValue;
   }
 
   const brief = await prisma.clientBrief.upsert({

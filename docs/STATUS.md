@@ -23,6 +23,32 @@ billing UI + owner-gated routes, Meta spend in KPIs, Higgsfield creative UI +
 refresh banner, lead scoring UI, objection logging, seasonal campaign suggestions,
 white-label branding, team seats/roles.
 
+**Sprint 3D — Editable SMS templates + call scripts (2026-05-31, branch `sprints-13-17`):**
+- Migration (prod via Supabase MCP): `ClientBrief.smsTemplates` (Json) +
+  `callScriptOverride` (Text).
+- `src/lib/services/smsTemplates.ts` — canonical template set (bookedConfirmation/
+  dayBefore/hourBefore/qualifiedNudge/noShow), per-vertical defaults (aesthetics/
+  roofing/home_services/personal_injury/dental/legal + generic), `resolveTemplate`
+  (owner override → vertical default → generic), `renderTemplate` ({{lead_first_name}}
+  /{{business_name}}/{{appointment_time}}/{{agent_name}}), `parseSmsTemplates`.
+- `twilioService.queueAppointmentReminders` now reads `ClientBrief.smsTemplates`
+  (via the appointment's blueprint include) and renders the owner's templates;
+  legacy {{LEAD_NAME}}/{{BUSINESS_NAME}} aliases kept.
+- Brief PUT accepts `smsTemplates` (validated) + `callScriptOverride`.
+- `PUT/GET /api/clients/[id]/script` — saves the call script to ClientBrief AND
+  **pushes it live to the Retell LLM** (`updateRetellLlmPrompt`) — effective next
+  call, no redeploy. Returns whether it went live.
+- `CommsTemplatesPanel.tsx` mounted in the client sub-account: per-template
+  textareas (char count, 160 warn, preview with dummy data) + call-script editor
+  ("Save & push live").
+- New clients seed `smsTemplates` from the vertical defaults.
+- **Honest scope:** the spec's "20 verticals" → I seeded the 6 most relevant
+  aesthetics-adjacent verticals; the rest fall through to solid generic defaults
+  (not 20 bespoke sets). `qualifiedNudge`/`noShow` templates are defined + editable
+  but the qualified-nudge/no-show send sites still use their own inline copy — they
+  read the template set in a follow-up; reminders (the main 3) are fully wired.
+  Runtime-unverified. tsc 0.
+
 **Sprint 10F — Cross-tenant vector knowledge graph (2026-05-31):**
 - **pgvector 0.8.0 ENABLED** in prod (Supabase MCP); `VectorKnowledge` table with
   a real `embedding vector(1536)` column + vertical index. Prisma model declares

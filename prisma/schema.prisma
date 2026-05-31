@@ -94,6 +94,9 @@ model ClientBrief {
   distilledLearnings     String?   // ≤15 sharp, client-specific facts distilled nightly from outcomes; every role reads these
   learningsUpdatedAt     DateTime? // when Kai last refreshed distilledLearnings
   reportingPreferences   String?
+  // ── Editable comms templates (Sprint 3D) ────────────────────────────────────
+  smsTemplates           Json?     // { bookedConfirmation, dayBefore, hourBefore, qualifiedNudge, noShow } — owner-edited, agency-brand
+  callScriptOverride     String?   // owner-edited Sophie call script; pushed live to the Retell LLM on save
   clientContactName      String?
   clientContactEmail     String?
   clientWhatsApp         String?

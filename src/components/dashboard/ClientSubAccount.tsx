@@ -6,6 +6,7 @@ import { ClientBriefPanel } from "@/components/dashboard/ClientBriefPanel";
 import { PipelineBoard, type PipelineLead } from "@/components/dashboard/PipelineBoard";
 import { ClientMessages } from "@/components/dashboard/ClientMessages";
 import { TeamStrip } from "@/components/dashboard/TeamStrip";
+import { CommsTemplatesPanel } from "@/components/dashboard/CommsTemplatesPanel";
 import { TeamActivityFeed } from "@/components/dashboard/TeamActivityFeed";
 
 interface AgentAction {
@@ -601,6 +602,9 @@ export default function ClientSubAccount({ clientId, onBack }: ClientSubAccountP
 
       {/* Client knowledge brief */}
       <ClientBriefPanel blueprintId={client.id} agentName={agentName} />
+
+      {/* Editable comms templates + call script (Sprint 3D). */}
+      <CommsTemplatesPanel blueprintId={client.id} />
 
       {/* Creative generation (Higgsfield) */}
       <CreativePanel

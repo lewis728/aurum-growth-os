@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { defaultTemplatesForVertical } from "@/lib/services/smsTemplates";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         keyUSPs:              sellingPoints.length ? sellingPoints.join("; ") : null,
         clientContactName:    body.clientContactName?.trim() || null,
         clientWhatsApp:       body.clientWhatsApp?.trim() || null,
+        // Sprint 3D: seed editable SMS templates from the vertical defaults so the
+        // owner has a sensible, branded starting point to edit.
+        smsTemplates:         defaultTemplatesForVertical(body.vertical || "other") as unknown as Prisma.InputJsonValue,
       },
     });
 

@@ -7,6 +7,7 @@ import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/utils/withRetry";
 import { ReminderMessageType } from "@/enums/campaignEnums";
+import { resolveTemplate, renderTemplate, parseSmsTemplates } from "@/lib/services/smsTemplates";
 
 // ─── Environment Guards ───────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export async function queueAppointmentReminders(
         select: { phone: true, firstName: true, lastName: true, tenantId: true },
       },
       blueprint: {
-        select: { businessName: true },
+        select: { businessName: true, vertical: true, clientBrief: { select: { smsTemplates: true } } },
       },
     },
   });
@@ -158,24 +159,32 @@ export async function queueAppointmentReminders(
   const leadName = `${firstName} ${lastName}`.trim();
   const now = new Date();
 
-  const defaultTemplates: ReminderTemplates = {
-    confirmation:
-      "Hi {{LEAD_NAME}}, your consultation has been confirmed. We look forward to speaking with you. — {{BUSINESS_NAME}}",
-    day_before:
-      "Hi {{LEAD_NAME}}, a reminder that your consultation is tomorrow. Reply STOP to cancel. — {{BUSINESS_NAME}}",
-    hour_before:
-      "Hi {{LEAD_NAME}}, your consultation is in 1 hour. We'll call you shortly. — {{BUSINESS_NAME}}",
+  const businessName = appointment.blueprint?.businessName ?? "us";
+
+  // Sprint 3D: owner-editable templates (ClientBrief.smsTemplates) → vertical
+  // default → generic. The {{lead_first_name}}/{{business_name}}/{{appointment_time}}
+  // placeholders are the canonical set used across the app.
+  const saved = parseSmsTemplates(appointment.blueprint?.clientBrief?.smsTemplates);
+  const vertical = appointment.blueprint?.vertical;
+  const apptTime = scheduledAt.toLocaleString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+  });
+  const vars = {
+    lead_first_name:  firstName,
+    business_name:    businessName,
+    appointment_time: apptTime,
+    // legacy aliases for any template still using the old tokens
+    LEAD_NAME:        leadName,
+    BUSINESS_NAME:    businessName,
+  };
+  // Explicit templates arg (rare) wins; else resolve from saved/vertical/generic.
+  const tpl: ReminderTemplates = templates ?? {
+    confirmation: resolveTemplate("bookedConfirmation", saved, vertical),
+    day_before:   resolveTemplate("dayBefore", saved, vertical),
+    hour_before:  resolveTemplate("hourBefore", saved, vertical),
   };
 
-  const tpl = templates ?? defaultTemplates;
-
-  // White-label: the reminder goes to the CLIENT'S lead, so it must read the
-  // client's own business name — never the platform name.
-  const businessName = appointment.blueprint?.businessName ?? "us";
-  const render = (template: string): string =>
-    template
-      .replace(/\{\{LEAD_NAME\}\}/g, leadName)
-      .replace(/\{\{BUSINESS_NAME\}\}/g, businessName);
+  const render = (template: string): string => renderTemplate(template, vars);
 
   const confirmationAt = now;
   const dayBeforeAt = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000);
