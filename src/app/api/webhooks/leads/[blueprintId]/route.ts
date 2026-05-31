@@ -131,15 +131,21 @@ export async function POST(
     lead,
   });
 
-  // ── Trigger automations (fire-and-forget) ─────────────────────────────────
-  setImmediate(() => {
+  // ── Trigger automations — AWAITED ─────────────────────────────────────────
+  // Must NOT be deferred (setImmediate): on Vercel serverless the function is
+  // frozen once the response returns, so deferred work silently never runs.
+  // Wrapped so a failing automation never blocks the 200 (the lead + call are
+  // already persisted).
+  try {
     const crmLayer = blueprint.crm as unknown as CRMLayer;
-    void triggerAutomations(
+    await triggerAutomations(
       { blueprintId: blueprint.id, leadId: lead.id, tenantId: lead.tenantId },
       crmLayer.automationTriggers ?? [],
       "lead.created"
     );
-  });
+  } catch (err) {
+    console.error("[leads webhook] triggerAutomations failed:", err instanceof Error ? err.message : err);
+  }
 
   return NextResponse.json({ success: true, leadId: lead.id }, { status: 200 });
 }
