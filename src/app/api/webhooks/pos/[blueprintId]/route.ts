@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { decryptToken } from "@/lib/crypto/tokenCipher";
+import { decryptToken } from "@/lib/services/metaAuthService";
 import { recordPosTransaction, type PosEvent } from "@/lib/services/posIntegrationService";
 
 export const dynamic = "force-dynamic";

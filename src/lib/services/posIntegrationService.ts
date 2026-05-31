@@ -17,7 +17,7 @@
 
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { decryptToken } from "@/lib/crypto/tokenCipher";
+import { decryptToken } from "@/lib/services/metaAuthService";
 import { getMetaAccessToken } from "@/lib/services/metaAuthService";
 
 const META_GRAPH = "https://graph.facebook.com/v20.0";
