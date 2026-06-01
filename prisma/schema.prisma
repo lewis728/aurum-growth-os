@@ -121,6 +121,7 @@ model AgencyProfile {
   primaryGoal        String
   // Chief-of-staff (portfolio agent) context + alerting
   slackWebhookUrl          String?
+  outreachAllocation       Json?    // Layer 8 (Part 9) — recommended sending-domain split by market
   agencyAverageClientValue Float?
   targetClientsPerMonth    Int?
   chiefOfStaffBrief        String?
@@ -541,6 +542,23 @@ model ShadowAction {
 
   @@index([tenantId, blueprintId])
   @@index([blueprintId, agentRole])
+}
+
+// ── CpmSnapshot (Layer 8 — Part 9) ────────────────────────────────────────────
+// Rolling CPM history per blueprint for auction-arbitrage: cpmIndex = current /
+// 14-day average. Powers portfolio rebalancing + CPM-spike protection.
+model CpmSnapshot {
+  id          String   @id @default(cuid())
+  blueprintId String
+  tenantId    String
+  cpm         Float
+  cpmIndex    Float    // vs 14-day average
+  country     String   @default("GB")
+  vertical    String
+  createdAt   DateTime @default(now())
+
+  @@index([blueprintId, createdAt])
+  @@index([vertical, country, createdAt])
 }
 
 // ── CapacitySnapshot (Layer 7 — Part 8) ───────────────────────────────────────

@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/capacity-monitor",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/auction-arbitrage",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
