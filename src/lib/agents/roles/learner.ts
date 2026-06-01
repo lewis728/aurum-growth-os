@@ -194,13 +194,29 @@ export async function runLearnerCycle(
     const raw = completion.choices[0]?.message?.content?.trim();
     if (!raw) return { blueprintId, status: "error" };
 
-    // Keep only bullet lines, cap at MAX_FACTS.
-    const facts = raw
+    // Keep only bullet lines, cap at MAX_FACTS. If GPT returned no bullet lines,
+    // salvage non-empty prose lines into bullets rather than storing the raw blob
+    // (which could include preamble like "Here are the learnings:"). If still
+    // nothing usable, skip the write entirely — never overwrite good prior
+    // learnings with junk.
+    let facts = raw
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.startsWith("-"))
       .slice(0, MAX_FACTS);
-    const distilled = (facts.length ? facts : [raw]).join("\n");
+    if (facts.length === 0) {
+      facts = raw
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !/^(here are|these are|learnings?:)/i.test(l))
+        .map((l) => (l.startsWith("-") ? l : `- ${l}`))
+        .slice(0, MAX_FACTS);
+    }
+    if (facts.length === 0) {
+      console.warn(`[learner] No usable facts distilled for ${blueprintId} — skipping write.`);
+      return { blueprintId, status: "skipped_no_data" };
+    }
+    const distilled = facts.join("\n");
 
     // Persist. Brief may not exist yet for an un-onboarded client — upsert.
     if (brief) {

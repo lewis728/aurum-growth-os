@@ -75,8 +75,9 @@ export async function notifySlack(webhookUrl: string, alert: AgencyAlert): Promi
   }
 
   const emoji = ACTION_EMOJI[alert.actionType] ?? "🔔";
+  // Deep-link to the specific client when we have one, else the portfolio view.
   const link = alert.blueprintId
-    ? `${APP_BASE_URL}/overview`
+    ? `${APP_BASE_URL}/overview?client=${encodeURIComponent(alert.blueprintId)}`
     : `${APP_BASE_URL}/overview`;
 
   // Slack Block Kit — readable, scannable, deep-links to God Mode.
