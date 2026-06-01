@@ -386,6 +386,189 @@ Audit and fix for 5,000 concurrent clients:
 
 ---
 
+---
+
+## PART 7 — CONVERSATIONAL LINGUISTICS MATRIX (Layer 6)
+
+Marcus reads actual SMS and call transcripts to build city-level conversational models. Sophie doesn't use a generic script — she uses the linguistic model proven to convert in that specific city.
+
+**Create src/lib/intelligence/conversationalMatrix.ts**
+
+After every call outcome and SMS reply, extract:
+- The exact objection language used (verbatim)
+- The city and vertical
+- Which response framework was used
+- Whether it converted (booked/not booked)
+
+Store in a new ConversationalPattern table:
+```
+model ConversationalPattern {
+  id              String   @id @default(cuid())
+  vertical        String
+  city            String
+  country         String
+  objectionType   String   -- price/time/trust/competitor/logistics
+  objectionVerbatim String -- what the lead actually said
+  responseUsed    String
+  converted       Boolean
+  confidenceScore Float
+  sampleSize      Int      @default(1)
+  createdAt       DateTime @default(now())
+  @@index([vertical, city, objectionType])
+}
+```
+
+**A/B Testing Objection Responses:**
+When a new objection pattern is detected in a city with < 10 samples:
+- Generate 5 response variants using GPT-4o
+- Rotate through them across the next 20 conversations
+- Track conversion rate per variant
+- After 20 samples: promote winner to ConversationalPattern as the confirmed response
+- Log: "Tested 5 downtime objection responses in Manhattan aesthetics. Winner: cold-compress protocol mention. 34% uplift in booking rate."
+
+**City Linguistic Persona System:**
+After 30+ samples in a city, generate a CityPersona stored in VerticalProfile.geoIntelligence:
+```
+"cityPersonas": {
+  "manhattan": {
+    "primaryObjection": "logistics/time",
+    "buyingStyle": "high-urgency, time-sensitive",
+    "languageStyle": "direct, no fluff, respect their time",
+    "mustAvoid": "long explanations, soft closes",
+    "winningFrameworks": ["speed + convenience", "credentials + trust"],
+    "exampleWinningResponse": "Yes, we use a cold-compress protocol that clears redness in 15 mins — most clients go straight back to the office"
+  },
+  "toronto": {
+    "primaryObjection": "trust + emergency financing",
+    "buyingStyle": "value-conscious, risk-averse",
+    "languageStyle": "warm, honest, no pressure",
+    "mustAvoid": "pushy closes, hidden costs",
+    "winningFrameworks": ["waived diagnostic fee if booked on spot", "transparent pricing upfront"]
+  }
+}
+```
+
+When a new client onboards in Manhattan aesthetics — Sophie immediately pulls the Manhattan aesthetics CityPersona and uses the proven linguistic model. She doesn't start from scratch.
+
+**Wire into caller.ts and scheduler.ts:**
+- Before every call: inject CityPersona into Sophie's Retell dynamic variables
+- After every SMS reply: extract objection, log to ConversationalPattern, update A/B test data
+- After every call transcript: extract objection language, update patterns
+
+---
+
+## PART 8 — OPERATIONAL CAPACITY AUTOTHROTTLE (Layer 7)
+
+Marcus monitors the client's actual calendar capacity and throttles ad spend to match. Prevents over-delivery which is the #1 reason agencies lose clients.
+
+**Create src/lib/intelligence/capacityMonitor.ts**
+
+For each LIVE blueprint:
+1. Check CalendarConnection — if Google Calendar connected, fetch available slots for next 14 days
+2. Calculate capacity utilisation: booked slots / total available slots
+3. Determine throttle action:
+   - > 90% utilised → scale Meta budget DOWN 40%, log "Throttling spend — client at 90% capacity"
+   - > 75% utilised → scale DOWN 20%, log "Reducing spend — client at 75% capacity"  
+   - < 40% utilised → scale UP 20% (if below budgetHardLimit), log "Scaling spend — client has available capacity"
+   - 40-75% → maintain current budget, no action
+
+**Flash Campaign System:**
+Monitor for calendar cancellations:
+- Check calendar every 2 hours during business hours (cron: */2 8-18 * * 1-5)
+- If 2+ slots cancelled within last 2 hours → FLASH CAMPAIGN:
+  1. Query Lead table for this blueprintId where status = "qualified" AND appointmentBooked = false (warm leads who didn't convert)
+  2. Send immediate SMS: "Hi [name], we've just had a cancellation at [time] on [day] at [businessName]. Would you like to grab that slot? It's going fast." (use ClientBrief.smsTemplates if available)
+  3. Log AgentAction: "Flash campaign launched — 3 cancellations detected, 8 warm leads contacted"
+  4. Track which warm leads book within 2 hours
+
+**Retainer Transition Report (Day 25):**
+On day 25 of a client's trial (detect from blueprint.createdAt):
+- Generate performance summary:
+  - Total leads generated
+  - Total appointments booked
+  - Estimated revenue (appointments × ClientBrief.averageClientValue)
+  - Capacity utilisation rate
+  - ROI of retainer vs trial cost
+- Store as a ReportCard in DB
+- Send to agency owner via Slack: "Day 25 report ready for [businessName]. Estimated £[X] revenue generated. 16x ROI on the £2,000 retainer. Recommend transition."
+- Shows in God Mode dashboard under "Retainer Opportunities"
+
+Schema:
+```
+model CapacitySnapshot {
+  id              String   @id @default(cuid())
+  blueprintId     String
+  tenantId        String
+  utilisationPct  Float
+  availableSlots  Int
+  bookedSlots     Int
+  action          String?  -- what Marcus did
+  createdAt       DateTime @default(now())
+  @@index([blueprintId])
+}
+```
+
+Add capacity-monitor to vercel.json: { "path": "/api/cron/capacity-monitor", "schedule": "0 */2 * * *" }
+
+---
+
+## PART 9 — GLOBAL AD AUCTION ARBITRAGE (Layer 8)
+
+Marcus watches CPM fluctuations globally and shifts portfolio focus to where margins are highest.
+
+**Create src/lib/intelligence/auctionArbitrage.ts**
+
+Every 6 hours, for each LIVE blueprint, fetch current CPM from Meta Insights.
+Store in a rolling 14-day CPM history per blueprint.
+
+Calculate CPM index: current CPM / 14-day average CPM
+- CPM index > 1.5 (50% spike): market is expensive — flag as HIGH COST
+- CPM index < 0.7 (30% below average): market is cheap — flag as LOW COST OPPORTUNITY
+
+**Portfolio Rebalancing Logic:**
+Across ALL clients in the same vertical:
+- Identify HIGH COST markets (CPM spiking)
+- Identify LOW COST markets (CPM depressed)
+- Generate a portfolio recommendation for the agency owner:
+
+"MARKET ALERT: Manhattan aesthetics CPMs up 52% — US election ad competition. Dubai aesthetics CPMs down 31% — low competition window.
+Recommendation: Reduce Manhattan outreach budget 30% for next 2 weeks. Scale Dubai outreach immediately. Shift 2 of your 12 sending domains to UAE prospects."
+
+Send to agency owner via Slack + show in God Mode dashboard under "Market Intelligence".
+
+**Outreach Domain Reallocation:**
+Store in AgencyProfile: outreachAllocation Json
+When arbitrage opportunity detected:
+- Update the allocation recommendation: { "manhattan": 0.1, "dubai": 0.4, "toronto": 0.3, "london": 0.2 }
+- Show in Outreach tab: "Marcus recommends shifting 4 domains to Dubai prospects this week — CPMs 31% below average"
+- Agency owner approves with one click
+
+**CPM Spike Protection:**
+When a client's CPM spikes > 50% vs 14-day average:
+- If spike is > 3 days: automatically reduce budget 20% to protect ROI
+- Log: "CPM spike detected — reducing daily budget from £50 to £40 to maintain target CPL"
+- Notify agency owner via Slack
+
+Schema:
+```
+model CpmSnapshot {
+  id          String   @id @default(cuid())
+  blueprintId String
+  tenantId    String
+  cpm         Float
+  cpmIndex    Float    -- vs 14-day average
+  country     String
+  vertical    String
+  createdAt   DateTime @default(now())
+  @@index([blueprintId, createdAt])
+  @@index([vertical, country, createdAt])
+}
+```
+
+Add to vercel.json: { "path": "/api/cron/auction-arbitrage", "schedule": "0 */6 * * *" }
+
+---
+
 ## EXECUTION ORDER
 
 1. Read ALL existing files listed above before touching anything
