@@ -9,7 +9,11 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "fire-lead": "tsx scripts/fire-test-lead.ts",
-    "fire-postcall": "tsx scripts/fire-test-postcall.ts"
+    "fire-postcall": "tsx scripts/fire-test-postcall.ts",
+    "seed:verticals": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/seed-verticals.ts",
+    "train": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts",
+    "train:quick": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts --quick",
+    "train:estimate": "tsx src/lib/training/trainingRunner.ts --dry-run"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",

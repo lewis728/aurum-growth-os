@@ -136,33 +136,42 @@ async function main() {
       const g = await composeProfile(meta, r);
       const wordCount = g.expertBrief.split(/\s+/).length;
 
+      // Coerce GPT-returned numbers — a null/NaN on a NOT NULL float column is the
+      // classic "Null constraint violation". Default to safe non-zero values.
+      const num = (v: unknown, fallback: number): number => {
+        const n = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+      };
+      const cplGbp = num(g.cplBenchmarkGbp, 40);
+      const avgVal = num(g.avgTransactionValueGbp, 500);
+      const cplUsd = Math.round(cplGbp * GBP_TO_USD * 100) / 100;
+
       // objectionPlaybook comes straight from the real research (verbatim objections).
       const objectionPlaybook = r.topObjections.slice(0, 10);
+      const perf = { sources: r.sources.slice(0, 30), seededAt: new Date().toISOString() } as unknown as Prisma.InputJsonValue;
 
       await prisma.verticalProfile.upsert({
         where: { vertical: meta.vertical },
         create: {
-          vertical: meta.vertical, displayName: meta.displayName,
-          avgTransactionValueGbp: g.avgTransactionValueGbp, purchaseTimelineDays: 14,
-          conversionGoalType: "formbooking", cplBenchmarkGbp: g.cplBenchmarkGbp,
-          cplBenchmarkUsd: Math.round(g.cplBenchmarkGbp * GBP_TO_USD * 100) / 100,
+          vertical: meta.vertical, displayName: meta.displayName, systemPromptBase: "",
+          avgTransactionValueGbp: avgVal, purchaseTimelineDays: 14,
+          conversionGoalType: "formbooking", cplBenchmarkGbp: cplGbp, cplBenchmarkUsd: cplUsd,
           creativeStyle: "", audienceNotes: r.audienceTargeting.slice(0, 2000),
           targetingRecommendations: r.audienceTargeting.slice(0, 2000),
           bidStrategyNotes: "", offerStructure: "", callScriptNotes: "",
-          performanceData: { sources: r.sources.slice(0, 30), seededAt: new Date().toISOString() },
+          performanceData: perf,
           expertBrief: g.expertBrief, lastTrainedAt: new Date(),
           objectionPlaybook: objectionPlaybook as unknown as Prisma.InputJsonValue, callTimingData: g.callTimingData as unknown as Prisma.InputJsonValue,
           seasonalPatterns: g.seasonalPatterns as unknown as Prisma.InputJsonValue, complianceNotes: g.complianceNotes,
         },
         update: {
-          avgTransactionValueGbp: g.avgTransactionValueGbp, cplBenchmarkGbp: g.cplBenchmarkGbp,
-          cplBenchmarkUsd: Math.round(g.cplBenchmarkGbp * GBP_TO_USD * 100) / 100,
+          avgTransactionValueGbp: avgVal, cplBenchmarkGbp: cplGbp, cplBenchmarkUsd: cplUsd,
           audienceNotes: r.audienceTargeting.slice(0, 2000),
           targetingRecommendations: r.audienceTargeting.slice(0, 2000),
           expertBrief: g.expertBrief, lastTrainedAt: new Date(),
           objectionPlaybook: objectionPlaybook as unknown as Prisma.InputJsonValue, callTimingData: g.callTimingData as unknown as Prisma.InputJsonValue,
           seasonalPatterns: g.seasonalPatterns as unknown as Prisma.InputJsonValue, complianceNotes: g.complianceNotes,
-          performanceData: { sources: r.sources.slice(0, 30), seededAt: new Date().toISOString() },
+          performanceData: perf,
         },
       });
 
@@ -174,11 +183,12 @@ async function main() {
       }
       patterns += stored;
 
-      process.stdout.write(` ✅ ${wordCount}w brief, ${objectionPlaybook.length} objections, ${stored} patterns (CPL £${g.cplBenchmarkGbp})\n`);
+      process.stdout.write(` ✅ ${wordCount}w brief, ${objectionPlaybook.length} objections, ${stored} patterns (CPL £${cplGbp})\n`);
       if (wordCount < 2000) console.warn(`     ⚠️  brief under 2000 words (${wordCount})`);
       ok++;
     } catch (err) {
-      process.stdout.write(` ❌ ${err instanceof Error ? err.message : "fail"}\n`);
+      process.stdout.write(` ❌\n`);
+      console.error(`     full error:`, err);   // print the WHOLE error, not the truncated message
       failed++;
     }
   }

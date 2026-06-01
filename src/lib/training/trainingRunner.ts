@@ -17,13 +17,16 @@ import * as path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma"; // app singleton — Prisma 7 driver adapter configured
 import { CALLER_PERSONAS, CAMPAIGN_SCENARIOS } from "./adversarialEngine";
 import { trainCallerScenario } from "./callerTrainer";
 import { trainMediaBuyerScenario } from "./mediaBuyerTrainer";
 
 const VERTICALS = ["aesthetics", "cosmetic_dentistry", "roofing", "solar", "hvac", "home_improvement"];
-const CONCURRENCY = 3;
+// Concurrency is env-tunable. Default 1 because a low OpenAI tier (e.g. 30k TPM)
+// gets 429-throttled at higher fan-out, which distorts scores. Raise via
+// TRAIN_CONCURRENCY once on a higher tier.
+const CONCURRENCY = Number(process.env.TRAIN_CONCURRENCY ?? 1);
 
 // Full programme: 100 caller runs + 30 media-buyer runs per vertical = 780 total.
 const FULL_CALLER_PER_VERTICAL = 100;
@@ -85,8 +88,6 @@ const key = (role: string, vertical: string, scenario: string) => `${role}|${ver
 async function main() {
   if (DRY_RUN) { estimate(); return; }
   if (!process.env.OPENAI_API_KEY) { console.error("ERROR: OPENAI_API_KEY not set."); process.exit(1); }
-
-  const prisma = new PrismaClient();
   const jobs = buildJobs();
   console.log(`\n🥊 Adversarial training — ${jobs.length} scenarios across ${VERTICALS.length} verticals (${QUICK ? "quick" : "full"})\n`);
 
