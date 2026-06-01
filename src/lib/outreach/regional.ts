@@ -17,6 +17,34 @@ export type Region = "US" | "UK" | "INTL";
 const US_COUNTRIES = new Set(["US", "USA", "UNITED STATES", "CA", "CAN", "CANADA"]);
 const UK_COUNTRIES = new Set(["GB", "UK", "UNITED KINGDOM", "AU", "AUS", "AUSTRALIA", "NZ", "NEW ZEALAND", "IE", "IRELAND"]);
 
+// Common location tokens → ISO-ish country code, for CSV/location-string parsing.
+const COUNTRY_HINTS: { re: RegExp; code: string }[] = [
+  { re: /\b(united states|u\.?s\.?a?|america)\b/i, code: "US" },
+  { re: /\b(usa|us)\b/, code: "US" },
+  { re: /\b(canada|\bcan\b)\b/i, code: "CA" },
+  { re: /\b(united kingdom|england|scotland|wales|britain|\buk\b|\bgb\b)\b/i, code: "GB" },
+  { re: /\b(australia|\baus\b|\bau\b)\b/i, code: "AU" },
+  { re: /\b(new zealand|\bnz\b)\b/i, code: "NZ" },
+  { re: /\b(ireland|\bie\b)\b/i, code: "IE" },
+  { re: /\b(uae|united arab emirates|dubai|abu dhabi)\b/i, code: "AE" },
+];
+
+// US state codes/names → US (Apollo CSVs often only carry a city/state).
+const US_STATES = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|MA|MD|MI|MN|MO|MS|NC|NJ|NV|NY|OH|OK|OR|PA|SC|TN|TX|UT|VA|WA|WI|texas|florida|california|new york)\b/i;
+
+/**
+ * Detects a country code from a free-text location/country field (e.g. "Leeds, UK",
+ * "Austin, TX", "Dubai"). Returns an ISO-ish code; defaults to "GB" (launch market)
+ * when nothing matches. Pure.
+ */
+export function detectCountry(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "GB";
+  for (const h of COUNTRY_HINTS) if (h.re.test(s)) return h.code;
+  if (US_STATES.test(s)) return "US";
+  return "GB";
+}
+
 /** Maps a country code/name to the copy region. Defaults to UK (launch market). */
 export function detectRegion(country: string | null | undefined): Region {
   const c = (country ?? "").trim().toUpperCase();

@@ -291,6 +291,11 @@ model VerticalProfile {
   // ── Weekly expert brief (Sprint 13) ─────────────────────────────────────────
   expertBrief               String?   // ≤2000-word 30-year-expert brief; read by every agent in this vertical
   lastTrainedAt             DateTime? // when the vertical trainer last refreshed expertBrief
+  // ── Deep vertical intelligence (Part 3 — web-researched) ────────────────────
+  objectionPlaybook         Json?     // top-10 objections: {objection, underlyingFear, responseFramework, closingLine}[]
+  callTimingData            Json?     // {bestDays, bestTimes, worstTimes, why}
+  seasonalPatterns          Json?     // month-by-month demand + external triggers
+  complianceNotes           String?   @db.Text // claims Sophie must never make; banned phrases; regulators
   lastUpdated               DateTime @updatedAt
 
   @@index([vertical])
@@ -502,6 +507,37 @@ model VectorKnowledge {
   createdAt     DateTime @default(now())
 
   @@index([vertical])
+}
+
+// ── Adversarial training (Part 4) ─────────────────────────────────────────────
+// Scorecard row per agent × vertical × scenario type from the training runner.
+model TrainingResult {
+  id           String   @id @default(cuid())
+  agentRole    String   // caller | mediaBuyer
+  vertical     String
+  scenarioType String   // persona key or campaign-scenario key
+  overallScore Int      // 0-100 from the adversarial grader
+  breakdown    Json     // per-criterion scores
+  weaknesses   Json     // string[] of where it lost the booking / made the wrong call
+  improvements Json     // string[] of concrete fixes applied
+  passed       Boolean  // overallScore >= pass threshold
+  createdAt    DateTime @default(now())
+
+  @@index([agentRole, vertical])
+}
+
+// 14-day shadow deployment: agent decides on real data, execution blocked, logged.
+model ShadowAction {
+  id                String   @id @default(cuid())
+  blueprintId       String
+  agentRole         String
+  intendedAction    String
+  intendedReasoning String   @db.Text
+  actualOutcome     String?
+  wasCorrect        Boolean?
+  createdAt         DateTime @default(now())
+
+  @@index([blueprintId, agentRole])
 }
 
 // ── CreativeSimulation ────────────────────────────────────────────────────────

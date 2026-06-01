@@ -9,18 +9,29 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const { userId, orgId } = await auth();
   if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const tenantId = orgId ?? `pending:${userId}`;
 
+  // Optional filters (Part 5): ?vertical=…&country=…&status=…
+  const sp = new URL(req.url).searchParams;
+  const vertical = sp.get("vertical")?.trim();
+  const country = sp.get("country")?.trim();
+  const status = sp.get("status")?.trim();
+
   const prospects = await prisma.outreachProspect.findMany({
-    where:   { tenantId },
+    where:   {
+      tenantId,
+      ...(vertical ? { vertical } : {}),
+      ...(country ? { country } : {}),
+      ...(status ? { status } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take:    500,
     select: {
       id: true, firstName: true, lastName: true, companyName: true, cleanCompanyName: true,
-      website: true, vertical: true, location: true, contactEmail: true, status: true,
+      website: true, vertical: true, location: true, country: true, contactEmail: true, status: true,
       source: true, customHook: true, fitScore: true, qualified: true, qualifyReason: true,
       emailsSent: true, lastEmailAt: true, repliedAt: true, bookedAt: true, notes: true,
       instantlyLeadId: true, createdAt: true,

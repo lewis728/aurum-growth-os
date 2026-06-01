@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { sanitizeCompanyName } from "@/lib/outreach/nameSanitizer";
 import { domainOf } from "@/lib/outreach/websiteText";
+import { detectCountry } from "@/lib/outreach/regional";
 
 export interface ParsedRow {
   firstName:   string;
@@ -19,6 +20,7 @@ export interface ParsedRow {
   companyName: string;
   website:     string;
   location:    string;
+  country:     string;
   email:       string;
 }
 
@@ -64,6 +66,8 @@ const COLUMN_ALIASES: Record<string, keyof ParsedRow> = {
   domain:    "website",
   city:      "location",
   location:  "location",
+  state:     "location",
+  country:   "country",
   email:     "email",
   emailaddress: "email",
 };
@@ -78,11 +82,13 @@ export function parseApolloCsv(csv: string): ParsedRow[] {
 
   for (let i = 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
-    const row: ParsedRow = { firstName: "", lastName: "", companyName: "", website: "", location: "", email: "" };
+    const row: ParsedRow = { firstName: "", lastName: "", companyName: "", website: "", location: "", country: "", email: "" };
     headers.forEach((h, idx) => {
       const key = COLUMN_ALIASES[h];
       if (key) row[key] = (cells[idx] ?? "").trim();
     });
+    // Derive country from an explicit country column, else infer from location.
+    row.country = detectCountry(row.country || row.location);
     if (!row.companyName && !row.website) continue; // unusable
     rows.push(row);
   }
@@ -123,6 +129,7 @@ export async function importProspects(tenantId: string, rows: ParsedRow[], verti
           website:          row.website || "",
           websiteDomain:    domain,
           location:         row.location || null,
+          country:          row.country || "GB",
           contactEmail:     row.email || null,
           vertical,
           source:           "apollo_csv",

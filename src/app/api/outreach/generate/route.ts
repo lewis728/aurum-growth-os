@@ -15,6 +15,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { sanitizeCompanyName } from "@/lib/outreach/nameSanitizer";
 import { domainOf } from "@/lib/outreach/websiteText";
+import { detectCountry } from "@/lib/outreach/regional";
 import { processProspect } from "@/lib/outreach/persist";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const firstName    = typeof body.firstName === "string" ? body.firstName.trim().slice(0, 100) : "";
   const location     = typeof body.location === "string" ? body.location.trim().slice(0, 120) : "";
   const vertical     = typeof body.vertical === "string" && body.vertical.trim() ? body.vertical.trim().slice(0, 60) : "aesthetics";
+  // Explicit country wins; else infer from the location ("Austin, TX" → US).
+  const country      = typeof body.country === "string" && body.country.trim() ? body.country.trim().slice(0, 40) : detectCountry(location);
 
   if (!businessName || !website) {
     return NextResponse.json({ error: "businessName and website are required." }, { status: 400 });
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       data: {
         tenantId, firstName: firstName || null, companyName: businessName,
         cleanCompanyName: sanitizeCompanyName(businessName) || null,
-        website, websiteDomain: domain, location: location || null,
+        website, websiteDomain: domain, location: location || null, country,
         vertical, source: "manual", status: "pending",
       },
     });
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // refresh the inputs the user just typed
     prospect = await prisma.outreachProspect.update({
       where: { id: prospect.id },
-      data: { firstName: firstName || prospect.firstName, location: location || prospect.location, vertical },
+      data: { firstName: firstName || prospect.firstName, location: location || prospect.location, vertical, country },
     });
   }
 
