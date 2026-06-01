@@ -13,11 +13,10 @@
  * never auto-deploy unproven creative).
  */
 
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { buildClientContext } from "@/lib/agents/clientContext";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 const PERSONA_COUNT = 15;
 const PASS_THRESHOLD = 7.5;

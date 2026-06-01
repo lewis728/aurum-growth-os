@@ -12,12 +12,11 @@
  * and the caller (cron) iterates with Promise.allSettled.
  */
 
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { safeWhatsApp } from "@/lib/services/twilioService";
 import { getBranding } from "@/lib/services/brandingService";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface WeeklyUpdateResult {

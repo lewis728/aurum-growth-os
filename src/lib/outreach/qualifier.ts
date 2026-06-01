@@ -12,9 +12,8 @@
  *  avoid adding an Anthropic dependency/key. Same JSON contract, temp 0.1.)
  */
 
-import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 export const MIN_FIT_SCORE = 75;
 

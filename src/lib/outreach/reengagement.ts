@@ -12,11 +12,10 @@
  * NEVER THROWS at the top level.
  */
 
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { isSuppressed } from "@/lib/outreach/suppression";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 export const REENGAGE_AFTER_DAYS = 90;
 export const MAX_REENGAGE = 2; // at most 2 re-engagement cycles, ever

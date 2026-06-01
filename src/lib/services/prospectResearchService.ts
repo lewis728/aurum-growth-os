@@ -17,12 +17,11 @@
  * from whatever signal exists. NEVER THROWS at the top level.
  */
 
-import OpenAI from "openai";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { searchAdLibrary, compactAdLines } from "@/lib/services/metaAdLibrary";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_SITE_CHARS = 6000;

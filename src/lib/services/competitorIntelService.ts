@@ -14,12 +14,11 @@
  * were observed rather than inventing competitors. NEVER THROWS.
  */
 
-import OpenAI from "openai";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { searchAdLibrary, compactAdLines, type AdArchiveRow } from "@/lib/services/metaAdLibrary";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 const MAX_SNAPSHOTS = 4;          // keep the last 4 weeks
 const MAX_SEARCH_TERMS = 4;       // cap ad-library calls per scan

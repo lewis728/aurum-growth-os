@@ -13,9 +13,8 @@
  * specific-ish hook if the model is unavailable, so the sequence can still build.
  */
 
-import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 const MAX_PASSES = 3;
 const MAX_WORDS = 20;

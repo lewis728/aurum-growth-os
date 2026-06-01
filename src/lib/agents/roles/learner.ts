@@ -20,10 +20,9 @@
  * too little data to learn from, it no-ops rather than inventing patterns.
  */
 
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_FACTS = 15;

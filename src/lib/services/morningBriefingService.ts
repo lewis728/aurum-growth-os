@@ -11,7 +11,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import OpenAI from "openai";
+import { openai } from "@/lib/services/openaiClient";
 import { aggregateObjections } from "@/lib/services/objectionService";
 import { getSeasonalStrength } from "@/lib/services/insightsService";
 import { ServiceVertical } from "@/enums/campaignEnums";
@@ -113,8 +113,7 @@ export async function generateMorningBriefing(
       `ad changes and why. End with one forward-looking sentence. Sound like a competent ` +
       `staff member, not a chatbot. No bullet points.`;
 
-    // ── Generate ────────────────────────────────────────────────────────────
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // ── Generate (shared OpenAI client — timeout + retries) ───────────────────
     const completion = await openai.chat.completions.create({
       model:       "gpt-4o",
       temperature: 0.6,

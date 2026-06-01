@@ -15,9 +15,8 @@
  * testable and the safety policy lives in one place). NEVER THROWS.
  */
 
-import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "@/lib/services/openaiClient";
 
 export type ReplyIntent =
   | "interested"      // wants to know more / ready → send Calendly
