@@ -11,6 +11,7 @@
     "fire-lead": "tsx scripts/fire-test-lead.ts",
     "fire-postcall": "tsx scripts/fire-test-postcall.ts",
     "seed:verticals": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/seed-verticals.ts",
+    "seed:decisions": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/seed-decision-library.ts",
     "train": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts",
     "train:quick": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts --quick",
     "train:estimate": "tsx src/lib/training/trainingRunner.ts --dry-run"

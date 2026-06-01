@@ -516,6 +516,50 @@ model VectorKnowledge {
   @@index([vertical])
 }
 
+// Case-Based Reasoning library for Marcus (Layer 4). As with VectorKnowledge, the
+// `embedding vector(1536)` column is pgvector and lives OUTSIDE Prisma (read/written
+// via raw SQL); the scalar fields below are the Prisma-managed surface. Holds hand-
+// authored 30-year-veteran cases plus Marcus's own decisions scored 48h later by
+// the self-learning pipeline. source = "seed" | "generated" | "self_learned".
+model DecisionExample {
+  id        String   @id @default(cuid())
+  vertical  String
+  situation String
+  diagnosis String
+  action    String
+  outcome   String
+  lesson    String
+  source    String   @default("generated")
+  quality   Float    @default(0.8)
+  createdAt DateTime @default(now())
+
+  @@index([vertical])
+}
+
+// Self-learning ledger (see selfLearningPipeline). Every EXECUTED Marcus decision
+// is traced here with its baseline CPL, then scored ~48h later against the real
+// Meta CPL window and promoted into DecisionExample. Only finalised cases live in
+// DecisionExample; in-flight decisions live here until evaluated.
+model DecisionTrace {
+  id             String    @id @default(cuid())
+  blueprintId    String
+  tenantId       String
+  vertical       String
+  metaCampaignId String?
+  actionType     String
+  situation      String
+  diagnosis      String
+  action         String
+  baselineCpl    Float?
+  decidedAt      DateTime  @default(now())
+  evaluatedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([blueprintId])
+  @@index([evaluatedAt])
+  @@index([tenantId])
+}
+
 // ── Adversarial training (Part 4) ─────────────────────────────────────────────
 // Scorecard row per agent × vertical × scenario type from the training runner.
 model TrainingResult {

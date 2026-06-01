@@ -28,12 +28,13 @@
  * so a campaign is never left unmanaged.
  */
 
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
-import { ServiceVertical } from "@/enums/campaignEnums";
+import { openai, MODELS } from "@/lib/services/openaiClient";
 import { buildClientContext } from "@/lib/agents/clientContext";
 import { runAgentReasoningCycle, type ClientBriefGuardrails } from "@/lib/services/agentReasoningService";
 import { maybeAlertForAction } from "@/lib/services/alertService";
+import { retrieveSimilarCases, formatPrecedentsForPrompt } from "@/lib/intelligence/decisionLibrary";
+import { trackDecisionOutcomeInBackground } from "@/lib/intelligence/selfLearningPipeline";
 import {
   getCampaignInsightsSummary,
   getAdSetInsights,
@@ -43,8 +44,6 @@ import {
   updateCampaignBudget,
   type MetaBreakdownRow,
 } from "@/lib/services/metaAdsService";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const MEDIA_BUYER_NAME = "Marcus";
 const USD_TO_GBP = 1 / 1.27;
@@ -214,12 +213,32 @@ export async function runMediaBuyerCycle(
       proFlags.length ? `PRO SIGNALS (heuristic, pre-computed):\n${proFlags.map((f) => `  • ${f}`).join("\n")}` : "PRO SIGNALS: none firing.",
     ].join("\n");
 
+    // Learning-phase status (hoisted — referenced again in the DECIDE step's hard guardrail).
+    const inLearningPhase =
+      campaign.leads < LEARNING_PHASE_CONVERSIONS && campaign.spend >= LEARNING_PHASE_MIN_SPEND_GBP;
+
+    // ── CASE-BASED REASONING — retrieve the 5 most similar past cases ──────────
+    // A situation key (matched situation↔situation against the library) pulls expert
+    // precedents: hand-authored 30-year-veteran cases PLUS Marcus's own decisions,
+    // scored 48h later by the self-learning pipeline. CBR is an enhancement, never a
+    // dependency — retrieveSimilarCases never throws and returns [] if unavailable.
+    const situationText = [
+      `${blueprint.vertical} campaign for ${blueprint.businessName}.`,
+      `Last ${OBSERVE_DAYS}d: spend £${campaign.spend.toFixed(0)}, ${campaign.leads} conversions, ` +
+        `CPL £${campaign.cpl.toFixed(2)}${benchmark != null ? ` vs benchmark £${benchmark.toFixed(2)}` : ""}, ` +
+        `CTR ${campaign.ctr.toFixed(2)}%, frequency ${campaign.frequency.toFixed(1)}, CPM £${campaign.cpm.toFixed(2)}.`,
+      inLearningPhase ? `Still in Meta's learning phase (${campaign.leads}/${LEARNING_PHASE_CONVERSIONS} conversions).` : `Past the learning phase.`,
+      proFlags.length ? `Signals: ${proFlags.join(" ")}` : `No fatigue/overlap signals firing.`,
+    ].join(" ");
+    const precedents = await retrieveSimilarCases(blueprint.vertical, situationText, 5);
+    const cbrBlock = formatPrecedentsForPrompt(precedents);
+
     let diagnosis: Diagnosis | null = null;
     if (process.env.OPENAI_API_KEY) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o",
-          temperature: 0.3,
+          model: MODELS.primary,
+          temperature: 0.2,
           max_tokens: 700,
           response_format: { type: "json_object" },
           messages: [
@@ -243,8 +262,17 @@ export async function runMediaBuyerCycle(
                 '"expectedOutcome": string, "watchFor": string, "confidence": number (0-1)}. ' +
                 "PAUSE_CAMPAIGN only if performance is genuinely bad (CPL far above benchmark with real spend, few leads). " +
                 "SCALE_BUDGET only if genuinely strong (CPL well below benchmark with volume) AND frequency is healthy (<2.5). " +
-                "If frequency ≥3.0, prefer RECOMMEND_CREATIVE_REFRESH over scaling. Prefer NO_ACTION over a low-confidence guess.",
+                "If frequency ≥3.0, prefer RECOMMEND_CREATIVE_REFRESH over scaling. Prefer NO_ACTION over a low-confidence guess.\n\n" +
+                "Follow this 6-STEP DIAGNOSTIC FRAMEWORK, letting the EXPERT PRECEDENTS inform each step:\n" +
+                "1. OBSERVE — read ALL the data (campaign, ad set, ad/creative, audience, frequency, CPM history).\n" +
+                "2. HYPOTHESISE — list the plausible causes of the current performance.\n" +
+                "3. DISAMBIGUATE — use the evidence and the precedents to rule each cause in or out.\n" +
+                "4. DECIDE — choose exactly ONE action within the safety guardrails.\n" +
+                "5. PREDICT — state the expected outcome and the specific number you expect to move.\n" +
+                "6. MONITOR — state exactly what you'll watch next cycle to confirm or refute the call.\n" +
+                "Put steps 1-3 in `diagnosis`, step 4 in `action`/`actionType`, step 5 in `expectedOutcome`, step 6 in `watchFor`.",
             },
+            { role: "system", content: cbrBlock },
             { role: "user", content: `${evidence}\n\nDiagnose and decide now.` },
           ],
         });
@@ -291,8 +319,8 @@ export async function runMediaBuyerCycle(
     // wastes 3-5 days of optimisation. We approximate "in learning" as fewer than
     // ~50 conversions over the window, with real spend behind it. The prompt warns
     // GPT, but this code makes it impossible to execute the destructive action.
-    const inLearningPhase =
-      campaign.leads < LEARNING_PHASE_CONVERSIONS && campaign.spend >= LEARNING_PHASE_MIN_SPEND_GBP;
+    // (`inLearningPhase` is hoisted to the OBSERVE step, where it also feeds the CBR
+    // situation key.)
     if (inLearningPhase && (diagnosis.actionType === "PAUSE_CAMPAIGN" || diagnosis.actionType === "SCALE_BUDGET")) {
       await logAction(
         diagnosis.actionType,
@@ -320,6 +348,13 @@ export async function runMediaBuyerCycle(
       try {
         await pauseCampaign(metaCampaignId, tenantId);
         await logAction("PAUSE_CAMPAIGN", chain, "Campaign paused");
+        // Self-learning: trace this executed decision; it's scored 48h later and
+        // promoted into the case library as a precedent. Fire-and-forget, never blocks.
+        void trackDecisionOutcomeInBackground({
+          blueprintId, tenantId, vertical: blueprint.vertical, metaCampaignId,
+          actionType: "PAUSE_CAMPAIGN", situation: situationText,
+          diagnosis: diagnosis.diagnosis, action: diagnosis.action, baselineCpl: campaign.cpl,
+        });
         return { blueprintId, status: "acted", actionType: "PAUSE_CAMPAIGN" };
       } catch (err) {
         await logAction("PAUSE_CAMPAIGN", chain, `Tried to pause but the change didn't go through: ${err instanceof Error ? err.message : "unknown error"}`);
@@ -351,6 +386,13 @@ export async function runMediaBuyerCycle(
     try {
       if (metaAdSetId) await updateCampaignBudget(metaAdSetId, Math.round(proposed * 100), tenantId);
       await logAction("SCALE_BUDGET", chain, `Daily budget increased to £${proposed.toFixed(2)}`);
+      // Self-learning: trace this executed decision; scored 48h later vs real CPL and
+      // promoted into the case library. Fire-and-forget, never blocks.
+      void trackDecisionOutcomeInBackground({
+        blueprintId, tenantId, vertical: blueprint.vertical, metaCampaignId,
+        actionType: "SCALE_BUDGET", situation: situationText,
+        diagnosis: diagnosis.diagnosis, action: diagnosis.action, baselineCpl: campaign.cpl,
+      });
       return { blueprintId, status: "acted", actionType: "SCALE_BUDGET" };
     } catch (err) {
       await logAction("SCALE_BUDGET", chain, `Tried to scale budget but the change didn't go through: ${err instanceof Error ? err.message : "unknown error"}`);

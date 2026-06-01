@@ -18,6 +18,24 @@ import OpenAI from "openai";
 const DEFAULT_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS ?? 30_000);
 const DEFAULT_MAX_RETRIES = Number(process.env.OPENAI_MAX_RETRIES ?? 2);
 
+/**
+ * The ONE place model ids are named, so a model upgrade is a single env flip and
+ * never a code change scattered across call sites.
+ *
+ * `primary` is Marcus's reasoning model and the default for every high-stakes
+ * completion (CBR diagnosis, briefings, report writing). Specs sometimes reference
+ * an unreleased successor (e.g. a future "gpt-5.5") — we deliberately default to
+ * the real, currently-available model (`gpt-4o`) so nothing 404s in production,
+ * and expose `OPENAI_PRIMARY_MODEL` so the day a successor ships it's one env var,
+ * zero code change. `embedding` powers the vector layer (CBR + cross-client
+ * knowledge); it MUST stay 1536-dim to match the `vector(1536)` columns.
+ */
+export const MODELS = {
+  primary:   process.env.OPENAI_PRIMARY_MODEL ?? "gpt-4o",
+  mini:      process.env.OPENAI_MINI_MODEL    ?? "gpt-4o-mini",
+  embedding: process.env.OPENAI_EMBED_MODEL   ?? "text-embedding-3-small",
+} as const;
+
 // Lazy singleton so importing this module never throws when the key is absent
 // (scripts, dry-runs). Constructed on first real use.
 let _client: OpenAI | null = null;
