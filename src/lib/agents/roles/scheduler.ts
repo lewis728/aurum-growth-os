@@ -28,6 +28,7 @@ import { prisma } from "@/lib/prisma";
 import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioService";
 import { resolveTemplate, renderTemplate, parseSmsTemplates } from "@/lib/services/smsTemplates";
 import { extractObjections } from "@/lib/services/objectionService";
+import { recordPattern } from "@/lib/intelligence/conversationalMatrix";
 import { createCalendarEvent } from "@/lib/services/calendarService";
 import type { LeadStatus } from "@/types/lead";
 
@@ -103,7 +104,7 @@ export async function handleCallOutcome(
     const blueprint = await prisma.campaignBlueprint.findUnique({
       where:  { id: blueprintId },
       select: {
-        businessName: true, deployment: true, vertical: true,
+        businessName: true, deployment: true, vertical: true, targetLocation: true,
         clientBrief: { select: { smsTemplates: true } },
       },
     });
@@ -112,6 +113,7 @@ export async function handleCallOutcome(
     // Sprint 3D: owner-editable templates → vertical default → generic.
     const savedTemplates = parseSmsTemplates(blueprint?.clientBrief?.smsTemplates);
     const vertical       = blueprint?.vertical ?? null;
+    const targetLocation = blueprint?.targetLocation ?? null;
 
     // Best-effort SMS — never blocks lead/appointment persistence.
     const safeSms = async (body: string): Promise<void> => {
@@ -127,6 +129,23 @@ export async function handleCallOutcome(
       "";
     const objections = transcript ? await extractObjections(transcript) : [];
     const callAnalysisData = { ...payload, objections } as object;
+
+    // Layer 6 (Part 7): record each objection→outcome to the conversational matrix
+    // so Sophie learns the city's winning linguistic model. converted = booked.
+    // Fire-and-forget — learning must never block the post-call path.
+    if (vertical && objections.length > 0) {
+      const converted = Boolean(analysis.appointmentBooked);
+      for (const obj of objections) {
+        const verbatim = typeof obj === "string" ? obj
+          : (obj && typeof obj === "object" && "objection" in obj ? String((obj as { objection: unknown }).objection) : "");
+        if (verbatim) {
+          void recordPattern({
+            tenantId: lead.tenantId, vertical, location: targetLocation,
+            objectionVerbatim: verbatim, converted,
+          });
+        }
+      }
+    }
 
     // ── Booking path: valid future slot ──────────────────────────────────────
     if (

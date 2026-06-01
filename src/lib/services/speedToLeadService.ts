@@ -14,6 +14,7 @@ import { createPhoneCall, toE164 } from "@/lib/services/retellService";
 import { resolveClientFromNumber } from "@/lib/services/phoneNumberService";
 import { buildClientContext } from "@/lib/agents/clientContext";
 import { callFrameForTier, type LeadTier } from "@/lib/services/leadEnrichmentService";
+import { getCityPersona, renderPersonaForCall } from "@/lib/intelligence/conversationalMatrix";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 // Retell dynamic variables must all be strings. Renders the brief's
@@ -97,7 +98,7 @@ export async function placeSpeedToLeadCall(opts: {
 
   const blueprint = await prisma.campaignBlueprint.findUnique({
     where:  { id: blueprintId },
-    select: { status: true, businessName: true, vertical: true, offerHook: true, voice: true },
+    select: { status: true, businessName: true, vertical: true, offerHook: true, voice: true, targetLocation: true },
   });
   if (!blueprint) return;
 
@@ -159,6 +160,12 @@ export async function placeSpeedToLeadCall(opts: {
       .catch(() => null);
     const frame = callFrameForTier((tierRow?.leadTier as LeadTier) ?? "standard");
 
+    // Layer 6 (Part 7): pull the proven CityPersona for this city+vertical so Sophie
+    // uses the linguistic model that converts there, not a generic script. Empty
+    // string until a city has ≥30 samples; never throws.
+    const persona = await getCityPersona(blueprint.vertical, blueprint.targetLocation);
+    const localModel = renderPersonaForCall(persona);
+
     const { callId } = await createPhoneCall({
       fromNumber,
       toNumber,
@@ -175,6 +182,7 @@ export async function placeSpeedToLeadCall(opts: {
         objection_responses:    renderObjectionsForCall(brief?.objectionResponses),
         lead_tier:              frame.lead_tier,
         tier_frame:             frame.tier_frame,
+        local_conversational_model: localModel,
       },
     });
 

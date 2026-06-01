@@ -296,6 +296,7 @@ model VerticalProfile {
   callTimingData            Json?     // {bestDays, bestTimes, worstTimes, why}
   seasonalPatterns          Json?     // month-by-month demand + external triggers
   complianceNotes           String?   @db.Text // claims Sophie must never make; banned phrases; regulators
+  geoIntelligence           Json?     // { cityPersonas: { <city>: CityPersona } } — Layer 6 (Part 7)
   lastUpdated               DateTime @updatedAt
 
   @@index([vertical])
@@ -540,6 +541,29 @@ model ShadowAction {
 
   @@index([tenantId, blueprintId])
   @@index([blueprintId, agentRole])
+}
+
+// ── ConversationalPattern (Layer 6 — Part 7) ──────────────────────────────────
+// Per-city/vertical objection→response learning. Sophie uses the linguistic model
+// proven to convert in THAT city, not a generic script.
+model ConversationalPattern {
+  id                String   @id @default(cuid())
+  tenantId          String   @default("")
+  vertical          String
+  city              String
+  country           String   @default("GB")
+  objectionType     String   // price|time|trust|competitor|logistics|other
+  objectionVerbatim String   @db.Text
+  responseUsed      String?  @db.Text
+  converted         Boolean  @default(false)
+  confidenceScore   Float    @default(0)
+  sampleSize        Int      @default(1)
+  variantGroup      String?  // groups the 5 A/B response variants under test
+  isConfirmed       Boolean  @default(false) // promoted winner after the A/B test
+  createdAt         DateTime @default(now())
+
+  @@index([vertical, city, objectionType])
+  @@index([tenantId])
 }
 
 // ── CreativeSimulation ────────────────────────────────────────────────────────
