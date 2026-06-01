@@ -31,6 +31,7 @@ import {
 } from "@/lib/services/retellService";
 import { assembleVoicePromptFromBrief } from "@/lib/services/retellPromptAssembler";
 import { provisionClientPhoneNumber } from "@/lib/services/phoneNumberService";
+import { runOnboardingResearch } from "@/lib/intelligence/onboardingResearch";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 export interface ProvisionResult {
@@ -174,6 +175,14 @@ export async function provisionClientAgent(
   await provisionClientPhoneNumber(blueprintId, agentId).catch((e: unknown) =>
     console.error("[provision] phone number provisioning failed:", e instanceof Error ? e.message : e),
   );
+
+  // Part 10: fire the hyper-local onboarding research sweep. Fire-and-forget —
+  // NEVER blocks Deploy Sophie; the agent becomes a local expert in the background.
+  setImmediate(() => {
+    void runOnboardingResearch(blueprintId, tenantId).catch((err) =>
+      console.error("[onboardingResearch] failed silently:", err instanceof Error ? err.message : err),
+    );
+  });
 
   return { agentId, llmId, created: true };
 }

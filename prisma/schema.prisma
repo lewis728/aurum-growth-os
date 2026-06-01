@@ -99,6 +99,11 @@ model ClientBrief {
   callScriptOverride     String?   // owner-edited Sophie call script; pushed live to the Retell LLM on save
   // ── Competitor intelligence (Sprint 15) ─────────────────────────────────────
   competitorIntel        Json?     // rolling array of up to 4 weekly snapshots (newest first)
+  // ── Onboarding hyper-local intelligence (Part 10) ───────────────────────────
+  geoIntelligence        Json?     // city-specific addendum (CPL/audience/seasonal/competitors/objections)
+  localCplBenchmark      Float?    // local CPL benchmark for this client's city
+  competitorSnapshot     Json?     // { adCount, sampleAds[], usedAdLibrary, capturedAt } at onboarding
+  localSeasonalCalendar  Json?     // city-specific month-by-month demand calendar
   clientContactName      String?
   clientContactEmail     String?
   clientWhatsApp         String?
