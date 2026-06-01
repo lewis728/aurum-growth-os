@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/outreach-autopilot",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/capacity-monitor",
+      "schedule": "0 */2 * * *"
     }
   ]
 }

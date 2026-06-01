@@ -543,6 +543,40 @@ model ShadowAction {
   @@index([blueprintId, agentRole])
 }
 
+// ── CapacitySnapshot (Layer 7 — Part 8) ───────────────────────────────────────
+// Calendar utilisation reading + the throttle action Marcus took to match spend
+// to capacity (prevents over-delivery, the #1 churn cause).
+model CapacitySnapshot {
+  id             String   @id @default(cuid())
+  blueprintId    String
+  tenantId       String
+  utilisationPct Float
+  availableSlots Int
+  bookedSlots    Int
+  action         String?
+  createdAt      DateTime @default(now())
+
+  @@index([blueprintId])
+}
+
+// Day-25 retainer-transition report (and future report kinds) per client.
+model ReportCard {
+  id             String   @id @default(cuid())
+  blueprintId    String
+  tenantId       String
+  kind           String   @default("retainer_day25")
+  totalLeads     Int      @default(0)
+  totalBooked    Int      @default(0)
+  estRevenueGbp  Float    @default(0)
+  utilisationPct Float?
+  roi            Float?
+  summary        String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  @@unique([blueprintId, kind])
+  @@index([tenantId, createdAt])
+}
+
 // ── ConversationalPattern (Layer 6 — Part 7) ──────────────────────────────────
 // Per-city/vertical objection→response learning. Sophie uses the linguistic model
 // proven to convert in THAT city, not a generic script.
