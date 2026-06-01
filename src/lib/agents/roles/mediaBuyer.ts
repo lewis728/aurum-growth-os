@@ -50,6 +50,13 @@ const MEDIA_BUYER_NAME = "Marcus";
 const USD_TO_GBP = 1 / 1.27;
 const CONFIDENCE_FLOOR = 0.7;
 const OBSERVE_DAYS = 14;
+// Meta's learning phase needs ~50 conversions per optimisation event to exit.
+// Below this, PAUSE/SCALE would reset the learner and waste 3-5 days — so those
+// actions are downgraded to recommendations. `leads` is our conversion proxy.
+const LEARNING_PHASE_CONVERSIONS = 50;
+// Don't treat a near-zero-spend campaign as "in learning" worth protecting — it
+// has barely started; let normal logic apply once there's real spend behind it.
+const LEARNING_PHASE_MIN_SPEND_GBP = 50;
 
 // The only action types Marcus may decide. Anything else is coerced to NO_ACTION.
 type MarcusActionType =
@@ -196,7 +203,10 @@ export async function runMediaBuyerCycle(
       ``,
       ctx.promptBlock, // includes the brief + Kai's nightly distilledLearnings
       ``,
-      `CAMPAIGN (last ${OBSERVE_DAYS}d): spend £${campaign.spend.toFixed(0)}, ${campaign.leads} leads, CPL £${campaign.cpl.toFixed(2)}, CTR ${campaign.ctr.toFixed(2)}%, freq ${campaign.frequency.toFixed(1)}, reach ${campaign.reach}, CPM £${campaign.cpm.toFixed(2)}, ${campaign.impressions} impressions`,
+      `CAMPAIGN (last ${OBSERVE_DAYS}d): spend £${campaign.spend.toFixed(0)}, ${campaign.leads} leads/conversions, CPL £${campaign.cpl.toFixed(2)}, CTR ${campaign.ctr.toFixed(2)}%, freq ${campaign.frequency.toFixed(1)}, reach ${campaign.reach}, CPM £${campaign.cpm.toFixed(2)}, ${campaign.impressions} impressions`,
+      campaign.leads < LEARNING_PHASE_CONVERSIONS && campaign.spend >= LEARNING_PHASE_MIN_SPEND_GBP
+        ? `LEARNING PHASE: only ${campaign.leads}/${LEARNING_PHASE_CONVERSIONS} conversions — this campaign is still in Meta's learning phase. Do NOT pause or scale; it needs time to exit. Recommend only.`
+        : `LEARNING PHASE: cleared (${campaign.leads} conversions) — normal pause/scale logic applies.`,
       summariseRows("AD SETS", adsets, (r) => r.name ?? r.id ?? "adset"),
       summariseRows("ADS / CREATIVES", ads, (r) => r.name ?? r.id ?? "ad"),
       summariseRows("AUDIENCE — demographics", audience.demographics, (r) => `${r.age ?? "?"}/${r.gender ?? "?"}`),
@@ -275,6 +285,23 @@ export async function runMediaBuyerCycle(
       `Confidence: ${(diagnosis.confidence * 100).toFixed(0)}%`;
 
     // ── STEP 3 — DECIDE (guardrails AFTER GPT) ────────────────────────────────
+
+    // LEARNING-PHASE GUARDRAIL (hard, not advisory): never PAUSE or SCALE a
+    // campaign still in Meta's learning phase — doing so resets the learner and
+    // wastes 3-5 days of optimisation. We approximate "in learning" as fewer than
+    // ~50 conversions over the window, with real spend behind it. The prompt warns
+    // GPT, but this code makes it impossible to execute the destructive action.
+    const inLearningPhase =
+      campaign.leads < LEARNING_PHASE_CONVERSIONS && campaign.spend >= LEARNING_PHASE_MIN_SPEND_GBP;
+    if (inLearningPhase && (diagnosis.actionType === "PAUSE_CAMPAIGN" || diagnosis.actionType === "SCALE_BUDGET")) {
+      await logAction(
+        diagnosis.actionType,
+        `${chain}\n\nHELD: campaign is still in Meta's learning phase (${campaign.leads}/${LEARNING_PHASE_CONVERSIONS} conversions). ` +
+        `${diagnosis.actionType === "PAUSE_CAMPAIGN" ? "Pausing" : "Scaling"} now would reset the learner and waste days of optimisation, so I'm holding and recommending only.`,
+        "Recommendation only — protecting the learning phase",
+      );
+      return { blueprintId, status: "recommended", actionType: diagnosis.actionType };
+    }
 
     // Low confidence → never execute; record as a recommendation.
     if (diagnosis.confidence < CONFIDENCE_FLOOR && diagnosis.actionType !== "NO_ACTION") {
