@@ -386,6 +386,103 @@ Audit and fix for 5,000 concurrent clients:
 
 ---
 
+## PART 10 — CLIENT ONBOARDING INTELLIGENCE SWEEP (CRITICAL)
+
+When a new client is deployed via Deploy Sophie, immediately fire a real-time research sweep specific to their city AND vertical. The agent must know everything about HVAC in Manhattan, or aesthetics in Sydney, or roofing in Toronto — before the first lead ever calls.
+
+This is not the generic vertical brief. This is hyper-local intelligence generated fresh the moment a client is added.
+
+**Create src/lib/intelligence/onboardingResearch.ts**
+
+Export: `async function runOnboardingResearch(blueprintId: string, tenantId: string): Promise<void>`
+
+Fires immediately after agentProvisioning completes. Never blocks Deploy Sophie — fire and forget via setImmediate. Never throws. Logs everything to AgentAction.
+
+**WHAT IT RESEARCHES (web search + Meta Ad Library):**
+
+1. LOCAL CPL BENCHMARKS
+Search: "[vertical] Facebook ads CPL [city] [year]" + "[vertical] lead generation cost [city]"
+Extract: local CPL range, how it differs from national average, why
+
+2. LOCAL COMPETITOR LANDSCAPE
+Query Meta Ad Library API for active ads in this vertical within 25 miles of client's location
+Extract: number of competitors advertising, their offers, creative formats dominating, gaps in the market
+Store as competitorSnapshot with timestamp
+
+3. LOCAL AUDIENCE INSIGHTS
+Search: "[city] [vertical] target demographic" + "[city] [vertical] customer profile"
+Examples of what to find:
+- Manhattan HVAC: high-rise buildings dominate, property managers are key audience, emergency service angle, extreme summer heat
+- Toronto HVAC: weather urgency, older housing stock, bilingual market
+- Sydney aesthetics: summer peaks December-February (southern hemisphere), beach culture drives appearance spend
+- Dublin roofing: older housing stock, wet climate creates urgency, different building regulations
+Extract: local nuances that differ from national profile
+
+4. LOCAL COMPLIANCE
+Search: "[city/state/country] [vertical] advertising regulations [year]"
+US: state-specific contractor licensing (NY, CA all differ)
+UK/Ireland: local authority variations
+Australia: ACCC rules, state licensing
+Extract: any local rules beyond the national brief
+
+5. LOCAL SEASONAL TRIGGERS
+City-specific demand calendar based on local weather patterns:
+- Manhattan HVAC: extreme heat July-August, heating October-April
+- Toronto: heating September-April, deep freeze January-February
+- Sydney: cooling December-February, heating June-August
+- Manchester: heating October-April, rarely needs cooling
+Extract: month-by-month demand SPECIFIC to this city
+
+6. LOCAL OBJECTION PATTERNS
+Search: "[city] [vertical] customer reviews" + "[city] [vertical] common complaints"
+Manhattan HVAC objections ≠ Manchester HVAC objections ≠ Toronto HVAC objections
+Extract: city-specific objection language and what closes leads there
+
+**WHAT IT DOES WITH THE RESEARCH:**
+
+1. Generate city-specific intelligence addendum via GPT-4o:
+System: "You are a veteran media buyer who has run [vertical] campaigns specifically in [city] for 10 years. Based on this research, write a 500-word addendum covering what is DIFFERENT about [city] specifically vs the national playbook. Be specific. Use real numbers. Focus on: CPL differences, audience nuances, seasonal triggers, competitor landscape, city-specific objections."
+
+2. Store results on ClientBrief:
+- geoIntelligence Json? — the city-specific addendum
+- localCplBenchmark Float? — local CPL benchmark
+- competitorSnapshot Json? — what competitors are running right now
+- localSeasonalCalendar Json? — city-specific demand calendar month by month
+
+3. Update the Retell agent prompt immediately:
+Call updateRetellLlmPrompt to inject geo intelligence into Sophie's script:
+"LOCAL MARKET CONTEXT FOR [city]:
+[city-specific addendum]
+Key local objection: [top local objection]
+Best call times in [city]: [local timing data]"
+
+4. Log AgentAction:
+"Onboarding research complete for [businessName] in [city]. Local CPL £[X] vs national £[Y]. [N] competitors found in area. Key insight: [one sentence]. Sophie's script updated with local context."
+
+5. First morning briefing includes:
+"I've completed my local market research for [city] [vertical]. Here's what I found: [key insights]. I'm ready."
+
+**WIRE INTO DEPLOY SOPHIE:**
+In agentProvisioning.ts, after blueprint is set to LIVE:
+```
+setImmediate(() => runOnboardingResearch(blueprintId, tenantId).catch(err => 
+  console.error('[onboardingResearch] failed silently:', err)
+))
+```
+
+**Add manual refresh route:**
+POST /api/admin/refresh-research — takes { blueprintId }, CRON_SECRET gated
+Re-runs runOnboardingResearch for existing blueprint. Use when refreshing a client's local intelligence.
+
+**Schema additions via Supabase MCP:**
+Add to ClientBrief:
+- geoIntelligence Json?
+- localCplBenchmark Float?
+- competitorSnapshot Json?
+- localSeasonalCalendar Json?
+
+This is what separates a generic AI tool from a genuine local market expert. The moment you add a Manhattan HVAC client, the agent knows Manhattan HVAC — not just HVAC in general. Every new client gets a fresh research sweep. Every agent starts as a local expert.
+
 ---
 
 ## PART 7 — CONVERSATIONAL LINGUISTICS MATRIX (Layer 6)
