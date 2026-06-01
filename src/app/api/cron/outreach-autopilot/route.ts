@@ -52,13 +52,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const worker = async (): Promise<void> => {
       while (cursor < pending.length) {
         const idx = cursor++;
-        const variant = await chooseVariant(tenantId, idx);
-        const r = await processProspect({ prospectId: pending[idx].id, tenantId, variantIndex: variant });
-        // record which variant this prospect actually got, for the A/B stats
-        await prisma.outreachProspect.update({ where: { id: pending[idx].id }, data: { subjectVariant: variant } }).catch(() => {});
-        if (r.status === "generated") summary.generated++;
-        else if (r.status === "rejected") summary.rejected++;
-        else summary.errored++;
+        try {
+          const variant = await chooseVariant(tenantId, idx);
+          const r = await processProspect({ prospectId: pending[idx].id, tenantId, variantIndex: variant });
+          // record which variant this prospect actually got, for the A/B stats
+          await prisma.outreachProspect.update({ where: { id: pending[idx].id }, data: { subjectVariant: variant } }).catch(() => {});
+          if (r.status === "generated") summary.generated++;
+          else if (r.status === "rejected") summary.rejected++;
+          else summary.errored++;
+        } catch (err) {
+          // Per-item isolation: one prospect's failure must not kill the worker
+          // (which would abort all CONCURRENCY workers via Promise.all).
+          summary.errored++;
+          console.error(`[cron/outreach-autopilot] prospect ${pending[idx]?.id} failed:`, err instanceof Error ? err.message : err);
+        }
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));

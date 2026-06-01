@@ -19,6 +19,7 @@ export const PROMOTION_ACCURACY = 0.85;
 
 /** Records an intended (but not executed) agent decision during shadow mode. */
 export async function logShadowAction(input: {
+  tenantId: string;
   blueprintId: string;
   agentRole: string;
   intendedAction: string;
@@ -27,6 +28,7 @@ export async function logShadowAction(input: {
   try {
     await prisma.shadowAction.create({
       data: {
+        tenantId: input.tenantId,
         blueprintId: input.blueprintId,
         agentRole: input.agentRole,
         intendedAction: input.intendedAction,
@@ -66,13 +68,13 @@ export interface PromotionStatus {
  * Promotes only when BOTH the 14-day window has elapsed AND graded accuracy ≥85%
  * over a meaningful sample (≥10 graded decisions).
  */
-export async function evaluatePromotion(blueprintId: string, agentRole: string): Promise<PromotionStatus> {
+export async function evaluatePromotion(tenantId: string, blueprintId: string, agentRole: string): Promise<PromotionStatus> {
   const base: PromotionStatus = {
     blueprintId, agentRole, graded: 0, correct: 0, accuracy: 0, daysObserved: 0, promote: false, reason: "no data",
   };
   try {
     const actions = await prisma.shadowAction.findMany({
-      where: { blueprintId, agentRole },
+      where: { tenantId, blueprintId, agentRole }, // tenant-scoped
       select: { wasCorrect: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });

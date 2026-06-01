@@ -48,7 +48,12 @@ async function purchaseNumber(phoneNumber: string): Promise<string> {
   const params = new URLSearchParams({ PhoneNumber: phoneNumber });
   const res = await fetch(url, {
     method:  "POST",
-    headers: { Authorization: twilioAuthHeader(), "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      Authorization: twilioAuthHeader(),
+      "Content-Type": "application/x-www-form-urlencoded",
+      // Idempotency: a retried purchase of the SAME number must not double-charge.
+      "Idempotency-Key": `buy:${phoneNumber}`,
+    },
     body:    params.toString(),
   });
   if (!res.ok) {

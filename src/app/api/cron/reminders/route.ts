@@ -129,13 +129,18 @@ async function processCallRetries(): Promise<number> {
   let placed = 0;
   for (const lead of candidates) {
     if (!lead.blueprintId) continue;
-    await placeSpeedToLeadCall({
-      blueprintId: lead.blueprintId,
-      tenantId:    lead.tenantId,
-      lead:        { id: lead.id, firstName: lead.firstName, lastName: lead.lastName, phone: lead.phone },
-      isRetry:     true,
-    });
-    placed++;
+    try {
+      await placeSpeedToLeadCall({
+        blueprintId: lead.blueprintId,
+        tenantId:    lead.tenantId,
+        lead:        { id: lead.id, firstName: lead.firstName, lastName: lead.lastName, phone: lead.phone },
+        isRetry:     true,
+      });
+      placed++;
+    } catch (err) {
+      // Per-item isolation — one lead's failure must not abort the retry batch.
+      console.error(`[cron/reminders] retry call failed for lead ${lead.id}:`, err instanceof Error ? err.message : err);
+    }
   }
   return placed;
 }

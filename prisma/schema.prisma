@@ -529,6 +529,7 @@ model TrainingResult {
 // 14-day shadow deployment: agent decides on real data, execution blocked, logged.
 model ShadowAction {
   id                String   @id @default(cuid())
+  tenantId          String   @default("") // multi-tenant isolation — blueprintId isn't globally scoped
   blueprintId       String
   agentRole         String
   intendedAction    String
@@ -537,6 +538,7 @@ model ShadowAction {
   wasCorrect        Boolean?
   createdAt         DateTime @default(now())
 
+  @@index([tenantId, blueprintId])
   @@index([blueprintId, agentRole])
 }
 

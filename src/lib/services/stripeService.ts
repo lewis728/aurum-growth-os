@@ -65,11 +65,15 @@ export async function createOrRetrieveCustomer(
     return existing.data[0].id;
   }
 
-  const customer = await stripe.customers.create({
-    email,
-    name: orgName,
-    metadata: { tenantId },
-  });
+  const customer = await stripe.customers.create(
+    {
+      email,
+      name: orgName,
+      metadata: { tenantId },
+    },
+    // Idempotency: a retry after a lost 201 must not create a duplicate customer.
+    { idempotencyKey: `customer:${tenantId}` },
+  );
 
   return customer.id;
 }
@@ -90,18 +94,22 @@ export async function createAgencySubscription(
   const platformPriceId = getPlatformPriceId();
   const seatPriceId = getSeatPriceId();
 
-  const subscription = await stripe.subscriptions.create({
-    customer: customerId,
-    items: [
-      { price: platformPriceId, quantity: 1 },
-      { price: seatPriceId, quantity: 0 },
-    ],
-    trial_period_days: 14,
-    payment_behavior: "default_incomplete",
-    payment_settings: { save_default_payment_method: "on_subscription" },
-    metadata: { tenantId },
-    expand: ["latest_invoice.payment_intent"],
-  });
+  const subscription = await stripe.subscriptions.create(
+    {
+      customer: customerId,
+      items: [
+        { price: platformPriceId, quantity: 1 },
+        { price: seatPriceId, quantity: 0 },
+      ],
+      trial_period_days: 14,
+      payment_behavior: "default_incomplete",
+      payment_settings: { save_default_payment_method: "on_subscription" },
+      metadata: { tenantId },
+      expand: ["latest_invoice.payment_intent"],
+    },
+    // Idempotency: a retried signup must not create a second subscription.
+    { idempotencyKey: `subscription:${tenantId}` },
+  );
 
   const trialEnd = subscription.trial_end
     ? new Date(subscription.trial_end * 1000)
