@@ -570,6 +570,7 @@ model OutreachProspect {
   websiteDomain    String?  // normalised host for dedup
   vertical         String   @default("aesthetics")
   location         String?
+  country          String   @default("GB")  // drives US vs UK regional spintax (Part 5)
   contactEmail     String?
   status           String   @default("pending") // pending|qualifying|rejected|generated|emailing|replied|booked|closed
   source           String   @default("manual")  // manual|apollo_csv|clay
@@ -612,6 +613,7 @@ model OutreachProspect {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, leadGrade])
+  @@index([tenantId, country])
   @@index([status, reengageAt])
   @@index([vertical])
 }

@@ -106,6 +106,7 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       cleanName,
       location:     p.location ?? undefined,
       vertical:     p.vertical,
+      country:      p.country,
       website:      p.website,
       websiteText,
       hasAds:       signals.isRunningAds ?? undefined,

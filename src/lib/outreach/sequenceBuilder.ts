@@ -11,6 +11,7 @@
 
 import { EMAIL_SEQUENCE, renderTemplate, renderSubject, type RenderedEmail, type SequenceVars } from "@/lib/outreach/emailSequences";
 import { generateHook, type HookInput } from "@/lib/outreach/hookGenerator";
+import { detectRegion, resolveSpintax, applyLexicon } from "@/lib/outreach/regional";
 
 export interface BuildInput {
   firstName:    string;
@@ -18,6 +19,8 @@ export interface BuildInput {
   cleanName?:   string;
   location?:    string;
   vertical?:    string;
+  /** Prospect country (ISO-ish). Drives US vs UK spintax — defaults to GB. */
+  country?:     string;
   website?:     string;
   treatments?:  string;
   websiteText?: string;
@@ -79,11 +82,18 @@ export async function buildSequence(input: BuildInput): Promise<BuiltSequence> {
     call_link:     input.callLink,
   };
 
+  // Regional layer (Part 5): resolve any {a|b} spintax deterministically per
+  // prospect, then apply the US/UK lexicon so American copy never reaches a UK/AU
+  // inbox (or vice versa). Seed off the variant index for stable A/B variation.
+  const region = detectRegion(input.country);
+  const seed = input.variantIndex ?? 0;
+  const regionalise = (text: string): string => applyLexicon(resolveSpintax(text, seed), region);
+
   const emails = EMAIL_SEQUENCE.map((tpl) => ({
     emailNumber: tpl.emailNumber,
     day:         tpl.day,
-    subject:     renderSubject(tpl, vars, tpl.emailNumber === 1 ? (input.variantIndex ?? 0) : 0),
-    body:        renderTemplate(tpl.body, vars),
+    subject:     regionalise(renderSubject(tpl, vars, tpl.emailNumber === 1 ? (input.variantIndex ?? 0) : 0)),
+    body:        regionalise(renderTemplate(tpl.body, vars)),
     scheduledAt: addDays(start, tpl.day).toISOString(),
   }));
 

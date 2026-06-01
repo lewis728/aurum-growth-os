@@ -817,6 +817,48 @@ Run cadence (important — not on every save):
 
 ## Questions from Claude Code
 
+## GLOBAL MARKET CONFIGURATION — READ THIS
+
+Lewis is launching worldwide across these exact markets from day one:
+
+**Primary markets:**
+- 🇺🇸 United States — NY, LA, Miami, Chicago, Houston, Phoenix, Dallas
+- 🇬🇧 United Kingdom — London, Manchester, Birmingham, Leeds, Glasgow
+- 🇨🇦 Canada — Toronto, Vancouver, Calgary, Montreal, Ottawa
+- 🇮🇪 Ireland — Dublin, Cork, Galway, Limerick
+- 🇦🇺 Australia — Sydney, Melbourne, Brisbane, Perth, Adelaide
+
+**Language rules — CRITICAL — never mix these:**
+- US: leads, appointments, zip codes, cell phone, schedule a call, fall/winter, vacation, realtor
+- UK/Ireland: bookings, enquiries, postcodes, mobile, have a chat, autumn/winter, holiday, estate agent
+- Canada: leads/appointments (US style) but British spelling — colour, centre, favour
+- Australia: bookings, enquiries, postcodes, mobile, informal — tradies, arvo, mate culture
+
+**Currency:** US=$, UK=£, Canada=C$, Ireland=€, Australia=A$
+
+**Outreach timing — emails send 8:30am-5pm LOCAL time only:**
+- US East: UTC-4/5, US West: UTC-7/8
+- UK/Ireland: UTC+0/1
+- Canada East: UTC-4/5, Canada West: UTC-7/8
+- Australia East: UTC+10/11, Australia West: UTC+8
+
+**Compliance:**
+- US: FTC, CAN-SPAM, CCPA
+- UK/Ireland: GDPR, ICO, ASA/CAP
+- Canada: CASL (strictest — requires consent)
+- Australia: Privacy Act, ACMA Spam Act
+
+**Cultural copy rules:**
+- US: Direct, ROI-focused, move fast
+- UK: Trust-first, understated, sceptical of hype
+- Ireland: Warm, conversational, relationship-driven
+- Canada: Professional but warm, blend of US+UK
+- Australia: Anti-bullshit, informal, direct
+
+Every email, SMS template, call script, and landing page must have market-specific variants. hookGenerator detects country and applies correct variant. Never send US copy to Australia or vice versa.
+
+---
+
 Q: 10F vector search — pgvector available?
 A: Option 1 — pgvector confirmed available and enabled on Supabase (version 0.8.0, just enabled). Use vector(1536) column type with ORDER BY embedding <=> query for cosine similarity. Real cross-client pattern matching. Build it properly.
 
