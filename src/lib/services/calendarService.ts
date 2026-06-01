@@ -140,6 +140,7 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
     encryptedToken: string;
     calendarId: string;
     expiresAt: Date | null;
+    timeZone: string | null;
   } | null;
 
   try {
@@ -150,6 +151,7 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
         encryptedToken: true,
         calendarId: true,
         expiresAt: true,
+        timeZone: true,
       },
     });
   } catch (err) {
@@ -198,6 +200,10 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
   const leadName = `${lead.firstName} ${lead.lastName}`.trim();
   const startTime = scheduledAt;
   const endTime = new Date(scheduledAt.getTime() + 60 * 60 * 1000); // 1-hour default duration
+  // The dateTime is an absolute UTC instant (toISOString), so the event fires at
+  // the correct moment regardless; this label controls how Google DISPLAYS it.
+  // Use the connection's captured tz, default UTC — never assume London.
+  const eventTimeZone = connection.timeZone ?? "UTC";
 
   const description = [
     `Client: ${leadName}`,
@@ -221,11 +227,11 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
             description,
             start: {
               dateTime: startTime.toISOString(),
-              timeZone: "Europe/London",
+              timeZone: eventTimeZone,
             },
             end: {
               dateTime: endTime.toISOString(),
-              timeZone: "Europe/London",
+              timeZone: eventTimeZone,
             },
           }
         );

@@ -260,6 +260,7 @@ model CalendarConnection {
   encryptedToken String           @db.Text  // AES-256-CBC encrypted access token
   refreshToken   String?          @db.Text  // Encrypted refresh token (Google only)
   calendarId     String           // Google: calendar ID; Calendly: user URI
+  timeZone       String?          // IANA tz captured at OAuth (e.g. America/New_York); null → UTC
   connectedAt    DateTime         @default(now())
   expiresAt      DateTime?        // Null for Calendly (long-lived tokens)
   updatedAt      DateTime         @updatedAt
