@@ -18,7 +18,16 @@ function createPrismaClient(): PrismaClient {
   if (!connectionString) {
     throw new Error("DATABASE_URL environment variable is not set");
   }
-  const pool    = new Pool({ connectionString });
+  // Pool sizing for serverless at scale: each warm function instance keeps its own
+  // pool, so a large `max` multiplied across thousands of instances would exhaust
+  // Postgres. Keep `max` small per instance; recycle idle connections fast; fail
+  // fast on connection acquisition rather than piling up. Overridable via env.
+  const pool = new Pool({
+    connectionString,
+    max:                    Number(process.env.PG_POOL_MAX ?? 5),
+    idleTimeoutMillis:      Number(process.env.PG_IDLE_TIMEOUT_MS ?? 10_000),
+    connectionTimeoutMillis: Number(process.env.PG_CONN_TIMEOUT_MS ?? 10_000),
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,

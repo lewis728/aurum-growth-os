@@ -9,9 +9,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAgentReasoningCycle } from "@/lib/services/agentReasoningService";
+import { mapPool } from "@/lib/utils/concurrency";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min — enough for all live blueprints
+// Bounded fan-out: at 1000+ clients, running every cycle at once would exhaust the
+// DB pool + hit GPT rate limits. Process in capped-concurrency waves instead.
+const CONCURRENCY = 10;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // ── Auth: verify Vercel cron secret ──────────────────────────────────────
@@ -35,10 +39,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // ── Run reasoning cycle for each blueprint (settle all, never throw) ──────
-  const results = await Promise.allSettled(
-    blueprints.map(bp => runAgentReasoningCycle(bp.id, bp.tenantId))
-  );
+  // ── Run reasoning cycle for each blueprint (bounded concurrency, never throw) ──
+  const results = await mapPool(blueprints, CONCURRENCY, (bp) => runAgentReasoningCycle(bp.id, bp.tenantId));
 
   const failed = results.filter(r => r.status === "rejected").length;
   if (failed > 0) {

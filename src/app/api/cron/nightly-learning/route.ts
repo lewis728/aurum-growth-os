@@ -12,9 +12,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runLearnerCycle } from "@/lib/agents/roles/learner";
+import { mapPool } from "@/lib/utils/concurrency";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min — enough for all live blueprints
+const CONCURRENCY = 10; // bounded fan-out — protect the DB pool + GPT limits at scale
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const authHeader = req.headers.get("authorization");
@@ -32,9 +34,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ updated: 0, skipped: 0, failed: 0, timestamp: new Date().toISOString() });
   }
 
-  const results = await Promise.allSettled(
-    blueprints.map((bp) => runLearnerCycle(bp.id, bp.tenantId)),
-  );
+  const results = await mapPool(blueprints, CONCURRENCY, (bp) => runLearnerCycle(bp.id, bp.tenantId));
 
   let updated = 0, skipped = 0, failed = 0;
   for (const r of results) {
