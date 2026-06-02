@@ -97,7 +97,8 @@ export async function dispatchProspects(opts: {
   const leads: InstantlyLead[] = eligible.map((p) => {
     const region = detectRegion(p.country);
     const niche = nicheConfig(p.vertical);
-    const seq1 = p.sequences[0]; // email 1 (lowest emailNumber) — fully rendered
+    const byNum = (n: number) => p.sequences.find((s) => s.emailNumber === n);
+    const seq1 = byNum(1) ?? p.sequences[0]; // email 1 — fully rendered
     const company = p.cleanCompanyName ?? p.companyName;
     return {
       email:             p.contactEmail as string,
@@ -107,6 +108,13 @@ export async function dispatchProspects(opts: {
       company_name:      company,
       subject_line:      seq1?.subject ?? "",
       email_body:        seq1?.body ?? "",
+      // Whole sequence app-controlled — Instantly follow-up steps use these.
+      subject_2:         byNum(2)?.subject,
+      email_body_2:      byNum(2)?.body,
+      subject_3:         byNum(3)?.subject,
+      email_body_3:      byNum(3)?.body,
+      subject_4:         byNum(4)?.subject,
+      email_body_4:      byNum(4)?.body,
       city:              extractCity(p.location) || (p.location ?? ""),
       niche_service:     niche.service,
       regional_booking_term: bookingTerm(p.vertical, region),

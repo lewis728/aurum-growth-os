@@ -25,6 +25,13 @@ export interface InstantlyLead {
   company_name?:           string;
   subject_line?:           string;
   email_body?:             string;
+  // Follow-up steps 2-4, fully rendered, so the WHOLE sequence is app-controlled.
+  subject_2?:              string;
+  email_body_2?:           string;
+  subject_3?:              string;
+  email_body_3?:           string;
+  subject_4?:              string;
+  email_body_4?:           string;
   city?:                   string;
   niche_service?:          string;
   regional_booking_term?:  string;
@@ -77,6 +84,12 @@ async function injectOne(lead: InstantlyLead): Promise<string | null> {
         company_name:          lead.company_name,
         subject_line:          lead.subject_line,
         email_body:            lead.email_body,
+        subject_2:             lead.subject_2,
+        email_body_2:          lead.email_body_2,
+        subject_3:             lead.subject_3,
+        email_body_3:          lead.email_body_3,
+        subject_4:             lead.subject_4,
+        email_body_4:          lead.email_body_4,
         city:                  lead.city,
         niche_service:         lead.niche_service,
         regional_booking_term: lead.regional_booking_term,
