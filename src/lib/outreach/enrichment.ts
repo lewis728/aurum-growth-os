@@ -41,6 +41,8 @@ const RATING_RE = /\b([0-5](?:\.\d)?)\s*(?:\/\s*5|stars?|out of 5)/i;
 export async function enrichProspect(opts: {
   companyName: string;
   websiteText: string;
+  /** ISO-ish country for the Meta Ad Library buy-signal lookup (defaults to GB launch market). */
+  country?:    string;
 }): Promise<EnrichmentSignals> {
   const text = opts.websiteText ?? "";
   const lower = text.toLowerCase();
@@ -60,7 +62,8 @@ export async function enrichProspect(opts: {
   // (we can't claim "not running ads" when we simply couldn't look).
   let isRunningAds: boolean | null = null;
   try {
-    const rows = await searchAdLibrary(opts.companyName, { country: "GB", limit: 5 });
+    const adCountry = (opts.country ?? "GB").trim().toUpperCase() || "GB";
+    const rows = await searchAdLibrary(opts.companyName, { country: adCountry, limit: 5 });
     if (rows.length > 0) isRunningAds = true;
     else if (process.env.META_ADLIBRARY_TOKEN) isRunningAds = false; // looked, found none
     // else stays null: no token, didn't really look

@@ -14,6 +14,8 @@
 
 
 import { openai } from "@/lib/services/openaiClient";
+import { nicheConfig } from "@/lib/outreach/niche";
+import { detectRegion } from "@/lib/outreach/regional";
 
 export const MIN_FIT_SCORE = 75;
 
@@ -21,6 +23,7 @@ export interface QualifyInput {
   companyName: string;
   location?:   string;
   vertical?:   string;
+  country?:    string;   // ISO-ish; drives currency in the ICP rubric
   websiteText: string;
 }
 
@@ -49,52 +52,48 @@ export async function qualifyProspect(input: QualifyInput): Promise<QualifyResul
     return { qualified: false, reasons: "qualifier unavailable (no OpenAI key)", fit_score: 0, accepted: false, errored: true };
   }
 
-  const vertical = input.vertical || "aesthetics";
-  const isAesthetics = vertical.toLowerCase().includes("aesthetic");
+  const vertical = input.vertical || "local_business";
+  const niche = nicheConfig(vertical);
+  const region = detectRegion(input.country);
+  const cur = region === "US" ? "$" : "£"; // launch market is UK → £
 
   const system =
-    `You are a strict B2B lead qualifier for a marketing agency whose ICP is ` +
-    `owner-operated UK aesthetics clinics. You judge whether THIS business matches ` +
-    `that profile from its website. You are sceptical and concise. Output STRICT JSON only.`;
+    `You are a strict B2B lead qualifier for a marketing agency. The ICP is the SAME across ` +
+    `every niche: owner-operated / independent LOCAL service businesses — premium operators ` +
+    `where the OWNER is the decision-maker. This prospect is a ${niche.noun} (${niche.service}). ` +
+    `Judge whether THIS business matches the ICP from its website. Sceptical and concise. ` +
+    `Output STRICT JSON only.`;
 
-  // The exact ICP — qualify checklist + hard disqualifiers from the owner.
-  const icpBlock = isAesthetics
-    ? [
-        `IDEAL CUSTOMER PROFILE — owner-operated UK aesthetics clinic:`,
-        `- Owner is the practitioner (nurse/doctor/aesthetician), 1-5 staff, in business 1+ years.`,
-        `- High-ticket treatments (Botox, filler, skin boosters, fat dissolving, laser, profhilo);`,
-        `  treatment value ~£150-£500, repeat clients worth £800-£2,000/yr.`,
-        `- Appointment/consultation model with capacity to fill (could take ~10 more consults/week).`,
-        ``,
-        `STRONG POSITIVE SIGNALS (each raises the score):`,
-        `- Already running Meta/Facebook ads OR clearly willing to (this ICP usually already spends`,
-        `  ~£500-£3,000/mo on ads that underperform — that inconsistency is the gap we fill; do NOT`,
-        `  penalise existing ads, it's a BUYING signal).`,
-        `- Located in a city or large town (enough audience size).`,
-        `- Has a booking system and a phone number on the site (leads can be called/booked).`,
-        `- Owner actively involved (not absentee).`,
-        ``,
-        `HARD DISQUALIFIERS (any one → qualified:false, score < 40):`,
-        `- Purely walk-in, no appointment model.`,
-        `- No real online presence at all.`,
-        `- Clearly tiny / hobbyist (would spend < £500/mo on ads).`,
-        `- Part of a chain or franchise (decision-maker not accessible).`,
-        `- Medical-only / surgical (cosmetic surgery, implants) — compliance too complex for now.`,
-      ].join("\n")
-    : [
-        `FIT SIGNALS (industry is context, not a filter):`,
-        `1. ROOM TO GROW — established, has capacity for more customers; not a solo/maxed-out`,
-        `   operator and not a massive enterprise or franchise HQ.`,
-        `2. HIGH-TICKET / GOOD LTV — each customer worth ~£150+ or strong repeat value.`,
-        `3. REACHABLE & MARKETABLE — appointment model, online presence, owner accessible, and`,
-        `   ads would plausibly grow them (already advertising imperfectly is a positive, not a minus).`,
-      ].join("\n");
+  // The ICP is identical across niches — only the trade noun/service changes.
+  const icpBlock = [
+    `IDEAL CUSTOMER PROFILE — owner-operated ${niche.noun} (applies to ALL our niches):`,
+    `- Independent / owner-operated; the owner/founder/director is the decision-maker (NOT a chain,`,
+    `  franchise, or national HQ where you can't reach the person who says yes).`,
+    `- Established (1+ years) with capacity to take on more work — not a maxed-out solo operator and`,
+    `  not a huge enterprise.`,
+    `- High-ticket / good LTV: each customer is worth real money (${cur}-hundreds to ${cur}-thousands)`,
+    `  on an appointment/job/quote model where ${niche.service} is the revenue driver.`,
+    ``,
+    `STRONG POSITIVE SIGNALS (each raises the score):`,
+    `- Already running Meta/Facebook/Google ads OR clearly willing to — this ICP usually already`,
+    `  spends on ads that underperform; that inconsistency is the gap we fill. Do NOT penalise`,
+    `  existing ads, it's a BUYING signal.`,
+    `- Serves a defined LOCAL market (a city or large town — enough demand).`,
+    `- Has a phone number and/or booking/enquiry form on the site (leads can be called + booked).`,
+    `- Owner actively involved (not absentee / not a faceless brand).`,
+    ``,
+    `HARD DISQUALIFIERS (any one → qualified:false, score < 40):`,
+    `- Part of a chain / franchise / national brand (decision-maker not accessible).`,
+    `- No real online presence at all.`,
+    `- Clearly tiny / hobbyist (no real ad budget) OR a massive enterprise.`,
+    `- Not a local service business / no appointment-or-job model (e.g. pure e-commerce, info site).`,
+  ].join("\n");
 
   const user = [
     `Decide if ${input.companyName} matches the ICP below.`,
     ``,
     `Business: ${input.companyName}${input.location ? ` (${input.location})` : ""}`,
-    `Vertical: ${vertical}`,
+    `Niche: ${niche.noun} — ${niche.service}`,
     ``,
     input.websiteText
       ? `Scraped website text:\n${input.websiteText}`

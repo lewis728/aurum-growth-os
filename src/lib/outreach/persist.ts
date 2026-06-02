@@ -14,6 +14,9 @@ import { sanitizeCompanyName } from "@/lib/outreach/nameSanitizer";
 import { qualifyProspect } from "@/lib/outreach/qualifier";
 import { buildSequence } from "@/lib/outreach/sequenceBuilder";
 import { enrichProspect, gradeLead, EMAILABLE_GRADES } from "@/lib/outreach/enrichment";
+import { isRoleEmail } from "@/lib/outreach/decisionMaker";
+import { verifyEmail } from "@/lib/outreach/verify";
+import { chooseVariant } from "@/lib/outreach/abTuner";
 
 /** After this many failed qualify attempts a prospect is parked as "errored". */
 export const MAX_ATTEMPTS = 3;
@@ -44,6 +47,17 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
     const p = await prisma.outreachProspect.findFirst({ where: { id: prospectId, tenantId } });
     if (!p) return { prospectId, status: "error", qualified: false, fitScore: 0, reason: "not found" };
 
+    // ── OWNER-ONLY GATE ─────────────────────────────────────────────────────────
+    // Generic/shared inboxes (info@, sales@, admin@…) are rejected outright — we
+    // only ever email a real decision-maker. Done BEFORE any GPT spend.
+    if (p.contactEmail && isRoleEmail(p.contactEmail)) {
+      await prisma.outreachProspect.update({
+        where: { id: prospectId },
+        data:  { status: "rejected", isRoleEmail: true, leadGrade: "D", qualifyReason: "Generic/role inbox — not a decision-maker; never emailed." },
+      }).catch(() => {});
+      return { prospectId, status: "rejected", qualified: false, fitScore: 0, reason: "role inbox (not the owner)" };
+    }
+
     // Count the attempt up-front so a permanent failure (e.g. missing OpenAI key)
     // can't loop forever: after MAX_ATTEMPTS a qualifier error becomes terminal
     // ("errored") instead of bouncing back to "pending" and being re-picked.
@@ -54,7 +68,7 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
     const cleanName = p.cleanCompanyName || sanitizeCompanyName(p.companyName) || p.companyName;
 
     // ── Enrichment (real signals before we judge) ───────────────────────────────
-    const signals = await enrichProspect({ companyName: cleanName, websiteText });
+    const signals = await enrichProspect({ companyName: cleanName, websiteText, country: p.country });
     const enrichmentData = {
       isRunningAds: signals.isRunningAds, reviewCount: signals.reviewCount,
       reviewRating: signals.reviewRating, hasPhone: signals.hasPhone,
@@ -66,6 +80,7 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       companyName: cleanName,
       location:    p.location ?? undefined,
       vertical:    p.vertical,
+      country:     p.country,
       websiteText,
     });
 
@@ -99,6 +114,33 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       return { prospectId, status: "review", qualified: q.qualified, fitScore: q.fit_score, reason: `Grade ${grade}: ${q.reasons}` };
     }
 
+    // ── Brutal verification — only a clean, deliverable mailbox proceeds ────────
+    // Proactive bounce protection: verify BEFORE we build/send. When a verifier is
+    // configured, anything that isn't a clean "valid" is parked for review (never
+    // sent). When no verifier is set, this is "skipped" and we rely on Clay's own
+    // verification + the role-inbox gate above.
+    let verificationStatus: string | null = null;
+    if (p.contactEmail) {
+      const v = await verifyEmail(p.contactEmail);
+      verificationStatus = v.status;
+      if (!v.sendable) {
+        await prisma.outreachProspect.update({
+          where: { id: prospectId },
+          data: {
+            status: "review", leadGrade: grade,
+            qualified: true, fitScore: q.fit_score, qualifyReason: q.reasons,
+            cleanCompanyName: cleanName, websiteDomain: domainOf(p.website),
+            verificationStatus: v.status, verifiedAt: new Date(), isRoleEmail: false, ...enrichmentData,
+          },
+        });
+        return { prospectId, status: "review", qualified: true, fitScore: q.fit_score, reason: `Email ${v.status} (${v.provider}) — parked, not deliverable enough to send` };
+      }
+    }
+
+    // ── A/B subject variant (self-tuning via abTuner) ───────────────────────────
+    const abIdx = await prisma.outreachProspect.count({ where: { tenantId, subjectVariant: { not: null } } }).catch(() => 0);
+    const variantIndex = input.variantIndex ?? await chooseVariant(tenantId, abIdx);
+
     // ── Build + persist the sequence ────────────────────────────────────────────
     const built = await buildSequence({
       firstName:    p.firstName ?? "there",
@@ -112,7 +154,7 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
       hasAds:       signals.isRunningAds ?? undefined,
       reviewCount:  signals.reviewCount ?? undefined,
       reviewRating: signals.reviewRating ?? undefined,
-      variantIndex: input.variantIndex,
+      variantIndex,
       callLink:     input.callLink,
     });
 
@@ -135,6 +177,8 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
           status: "generated", leadGrade: grade,
           qualified: true, fitScore: q.fit_score, qualifyReason: q.reasons,
           customHook: built.customHook, cleanCompanyName: cleanName, websiteDomain: domainOf(p.website),
+          subjectVariant: variantIndex, isRoleEmail: false,
+          verificationStatus, verifiedAt: verificationStatus ? new Date() : null,
           ...enrichmentData,
         },
       }),

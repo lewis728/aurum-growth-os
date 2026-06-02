@@ -762,6 +762,11 @@ model OutreachProspect {
   hasPhone         Boolean? // phone on site → leads can be called
   hasBooking       Boolean? // booking system detected
   enrichedAt       DateTime?
+  // ── Decision-maker guarantee + brutal verification (owner-only, no info@) ─────
+  contactTitle       String?   // job title from Clay waterfall (owner/founder/director…)
+  isRoleEmail        Boolean?  // true = generic inbox (info@/sales@…) → never emailed
+  verificationStatus String?   // valid|catch_all|risky|invalid|unknown|skipped
+  verifiedAt         DateTime?
   // ── 90-day re-engagement lifecycle ──────────────────────────────────────────
   dormantAt        DateTime? // when the 5-email sequence finished with no reply
   reengageAt       DateTime? // when this dormant lead becomes re-engageable (dormant + 90d)
@@ -777,6 +782,7 @@ model OutreachProspect {
   @@index([tenantId, status])
   @@index([tenantId, leadGrade])
   @@index([tenantId, country])
+  @@index([tenantId, verificationStatus])
   @@index([status, reengageAt])
   @@index([vertical])
 }

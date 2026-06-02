@@ -19,6 +19,17 @@ export interface InstantlyLead {
   first_name:       string;
   custom_hook:      string;
   custom_clean_name: string;
+  // Full merge set so the Instantly campaign template can render Lewis's exact
+  // email (subject {{subject_line}}, body {{email_body}}) AND any follow-up steps
+  // can use the individual niche/region-aware variables.
+  company_name?:           string;
+  subject_line?:           string;
+  email_body?:             string;
+  city?:                   string;
+  niche_service?:          string;
+  regional_booking_term?:  string;
+  regional_revenue_term?:  string;
+  your_name?:              string;
 }
 
 export interface InstantlyInjectResult {
@@ -57,6 +68,23 @@ async function injectOne(lead: InstantlyLead): Promise<string | null> {
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      // Only send defined custom variables (Instantly stores whatever it's given).
+      const customVariables: Record<string, string> = {
+        custom_hook:       lead.custom_hook,
+        custom_clean_name: lead.custom_clean_name,
+      };
+      const optional: Record<string, string | undefined> = {
+        company_name:          lead.company_name,
+        subject_line:          lead.subject_line,
+        email_body:            lead.email_body,
+        city:                  lead.city,
+        niche_service:         lead.niche_service,
+        regional_booking_term: lead.regional_booking_term,
+        regional_revenue_term: lead.regional_revenue_term,
+        your_name:             lead.your_name,
+      };
+      for (const [k, v] of Object.entries(optional)) if (typeof v === "string" && v.length) customVariables[k] = v;
+
       const res = await fetch(`${INSTANTLY_BASE}/leads`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -64,10 +92,7 @@ async function injectOne(lead: InstantlyLead): Promise<string | null> {
           campaign:    campaignId,
           email:       lead.email,
           first_name:  lead.first_name,
-          custom_variables: {
-            custom_hook:       lead.custom_hook,
-            custom_clean_name: lead.custom_clean_name,
-          },
+          custom_variables: customVariables,
         }),
       });
       if (res.ok) {

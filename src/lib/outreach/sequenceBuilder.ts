@@ -11,7 +11,9 @@
 
 import { EMAIL_SEQUENCE, renderTemplate, renderSubject, type RenderedEmail, type SequenceVars } from "@/lib/outreach/emailSequences";
 import { generateHook, type HookInput } from "@/lib/outreach/hookGenerator";
-import { detectRegion, resolveSpintax, applyLexicon } from "@/lib/outreach/regional";
+import { detectRegion, resolveSpintax } from "@/lib/outreach/regional";
+import { nicheConfig, bookingTerm, revenueTerm } from "@/lib/outreach/niche";
+import { extractCity } from "@/lib/outreach/decisionMaker";
 
 export interface BuildInput {
   firstName:    string;
@@ -32,6 +34,8 @@ export interface BuildInput {
   variantIndex?: number;
   /** Reuse a hook already generated (skip the LLM round-trip). */
   existingHook?: string;
+  /** Signs the email ({{your_name}}); defaults to OUTREACH_OWNER_NAME or "Lewis". */
+  yourName?:    string;
   /** Anchor for cadence scheduling; defaults to now at call time. */
   startAt?:     Date;
 }
@@ -55,12 +59,17 @@ export async function buildSequence(input: BuildInput): Promise<BuiltSequence> {
   let hookApproved = Boolean(input.existingHook);
   let hookFallback = false;
 
+  // Niche + region context drives both the hook outcome language and the merge tags.
+  const niche = nicheConfig(input.vertical);
+  const region = detectRegion(input.country);
+
   if (!customHook) {
     const hookInput: HookInput = {
       businessName: input.businessName,
       cleanName:    input.cleanName,
       location:     input.location,
       vertical:     input.vertical,
+      outcomeTerm:  niche.outcome,
       treatments:   input.treatments,
       website:      input.website,
       websiteText:  input.websiteText,
@@ -74,20 +83,28 @@ export async function buildSequence(input: BuildInput): Promise<BuiltSequence> {
     hookFallback = Boolean(res.fallback);
   }
 
+  const cleanCompany = input.cleanName || input.businessName;
+  const cityName = extractCity(input.location) || input.location || "your area";
   const vars: SequenceVars = {
-    first_name:    input.firstName || "there",
-    business_name: input.cleanName || input.businessName,
-    location:      input.location || "your area",
-    custom_hook:   customHook,
-    call_link:     input.callLink,
+    first_name:            input.firstName || "there",
+    business_name:         cleanCompany,
+    company_name:          cleanCompany,
+    location:              input.location || "your area",
+    city:                  cityName,
+    niche_service:         niche.service,
+    regional_booking_term: bookingTerm(input.vertical, region),
+    regional_revenue_term: revenueTerm(region),
+    custom_hook:           customHook,
+    your_name:             input.yourName?.trim() || process.env.OUTREACH_OWNER_NAME?.trim() || "Lewis",
+    call_link:             input.callLink,
   };
 
-  // Regional layer (Part 5): resolve any {a|b} spintax deterministically per
-  // prospect, then apply the US/UK lexicon so American copy never reaches a UK/AU
-  // inbox (or vice versa). Seed off the variant index for stable A/B variation.
-  const region = detectRegion(input.country);
+  // Resolve any {a|b} spintax deterministically per prospect (seeded by variant so
+  // A/B is reproducible). Region/niche correctness now comes from explicit merge
+  // vars (niche_service / booking / revenue terms), so we DON'T word-swap the body
+  // — that keeps Lewis's verbatim template intact (e.g. "calendar" stays "calendar").
   const seed = input.variantIndex ?? 0;
-  const regionalise = (text: string): string => applyLexicon(resolveSpintax(text, seed), region);
+  const regionalise = (text: string): string => resolveSpintax(text, seed);
 
   const emails = EMAIL_SEQUENCE.map((tpl) => ({
     emailNumber: tpl.emailNumber,

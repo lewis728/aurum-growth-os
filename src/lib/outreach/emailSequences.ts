@@ -1,11 +1,16 @@
 /**
  * src/lib/outreach/emailSequences.ts
- * The complete 5-email cold sequence as a typed structure — the EXACT copy Lewis
- * uses to sign aesthetics clients. Templates use {{variable}} placeholders that
- * sequenceBuilder.ts substitutes per prospect. Pure data + a renderer; no I/O.
+ * The cold sequence as a typed structure. Email 1 is Lewis's exact "1-month trial"
+ * pitch; emails 2-4 are short, NICHE-NEUTRAL follow-up bumps (no "clinic"/
+ * "consultation" wording) so the same sequence works for all 6 launch niches.
  *
- * Cadence (days): 0 Hook · 4 Problem · 8 Proof · 11 Pattern-interrupt · 14 Breakup.
- * Email 1 has three A/B subject variants (rotated across prospects).
+ * Templates use {{variable}} placeholders that sequenceBuilder.ts substitutes per
+ * prospect — including the niche/region-aware merge tags
+ * ({{niche_service}}, {{regional_booking_term}}, {{regional_revenue_term}}).
+ * Email 1 ships 4 A/B subject variants (rotated + self-tuned by abTuner). Pure data
+ * + a renderer; no I/O.
+ *
+ * Cadence (days): 0 Pitch · 3 Bump · 7 Cost-of-slow · 12 Breakup.
  */
 
 export interface EmailTemplate {
@@ -25,11 +30,17 @@ export interface RenderedEmail {
 
 /** Every placeholder the templates can reference. */
 export interface SequenceVars {
-  first_name:    string;
-  business_name: string;
-  location:      string;
-  custom_hook:   string;
-  call_link?:    string; // optional — email 3 call recording, blank until available
+  first_name:             string;
+  business_name:          string;  // clean company name (kept for back-compat)
+  company_name:           string;  // {{company_name}} — same clean name, explicit tag
+  location:               string;
+  city:                   string;  // {{city}}
+  niche_service:          string;  // {{niche_service}}
+  regional_booking_term:  string;  // {{regional_booking_term}}
+  regional_revenue_term:  string;  // {{regional_revenue_term}}
+  custom_hook:            string;  // {{custom_hook}} / {{ai_personalized_hook}}
+  your_name:              string;  // {{your_name}}
+  call_link?:             string;
 }
 
 export const EMAIL_SEQUENCE: EmailTemplate[] = [
@@ -37,99 +48,78 @@ export const EMAIL_SEQUENCE: EmailTemplate[] = [
     emailNumber: 1,
     day: 0,
     subjects: [
-      "free for 28 days — {{business_name}}",
-      "100% risk free — {{location}} aesthetics",
-      "we take all the risk",
+      "1 month trial of client acquisition for {{company_name}}",
+      "{{company_name}} — 4 weeks of client acquisition, on us",
+      "quick idea for {{company_name}} in {{city}}",
+      "we'll fill your calendar for 30 days, free — {{company_name}}",
     ],
     body: `Hey {{first_name}},
 
 {{custom_hook}}
 
-I'll cut straight to it. I am honestly sick of seeing marketing agencies charge businesses thousands in upfront costs before they've even proven they can book a single customer for you.
+My team and I build custom growth systems designed to scale local client volume for premium operators like {{company_name}}, using the high-performance frameworks we engineer.
 
-I don't think you should have to pay for something until you've actually seen it work.
+Essentially, we deploy dedicated campaigns tailored specifically to the {{city}} market to capture high-intent demand for you. The exact millisecond a local customer shows interest in {{niche_service}}, our system triggers an instant phone call to them within 60 seconds. We qualify them on the spot, confirm their urgency, and book them directly into an open slot on the {{company_name}} calendar before they can close their browser or call a competitor.
 
-So, for the next 4 weeks, we want to fully manage your ads, call every single lead within 60 seconds, handle all the follow-up, send SMS reminders, and hand-deliver booked consultations straight to your calendar. Completely free.
+Because the market is full of empty promises, we prefer to prove our value upfront. We want to deploy and run this entire client-acquisition system for your business for the next 4 weeks completely on our own dime. We look at it as a capital investment on our end to build a brand new pie together to both eat from.
 
-You just show up and do your job. We handle the rest.
+During this 4-week pilot, you keep 100% of the {{regional_revenue_term}} from every single {{regional_booking_term}} our system maps onto your calendar.
 
-Zero setup fees. Zero upfront retainers. No contract. If we don't bring you actual paying clients in the next 28 days, you owe us nothing. You keep everything we build.
+If the growth is undeniable on day 30, we transition to a flat monthly retainer to keep your pipeline running. We take our flat slice of the pie, and you keep 100% of the unlimited upside as you scale. If it doesn't work out, we turn off the valve, shake hands, and you keep every penny we generated.
 
-We're taking 100% of the risk because that's how it should work — value first.
+Sound fair? If your team in {{city}} has the physical capacity to handle a wave of new clients right now, let me know if you're open to a quick 5-minute call to look at the calendar math.
 
-We can only do this for 2 clinics right now.
+Best,
 
-Worth a quick 5-minute call to see how we do it?
-
-Lewis
-Aurum Growth`,
+— {{your_name}}`,
   },
   {
     emailNumber: 2,
-    day: 4,
-    subjects: ["what happens at 9pm on a Sunday?"],
+    day: 3,
+    subjects: ["quick one, {{first_name}}"],
     body: `Hey {{first_name}},
 
-Quick follow-up.
+Quick follow-up on my last email.
 
-Here's something that costs aesthetics clinics thousands every month without them realising it.
+The whole offer is genuinely risk-free: we run the entire client-acquisition system for {{company_name}} for 4 weeks on our own dime, and you keep 100% of the {{regional_revenue_term}} from every {{regional_booking_term}} we put on your calendar.
 
-Someone sees your ad at 9pm on a Sunday. They fill in the form. They're interested.
+If it doesn't work, you've lost nothing and you keep everything we built.
 
-Nobody calls them until Monday morning.
+Worth a quick 5 minutes to look at the calendar math?
 
-By then they've already booked with someone else — or talked themselves out of it.
-
-We built something that calls every lead within 60 seconds of them filling in your form. Automatically. At 9pm on a Sunday. While you're watching Netflix.
-
-If that's worth 5 minutes of your time, I'd love to show you.
-
-Lewis`,
+— {{your_name}}`,
   },
   {
     emailNumber: 3,
-    day: 8,
-    subjects: ["43 seconds"],
+    day: 7,
+    subjects: ["what happens at 9pm on a Sunday?"],
     body: `Hey {{first_name}},
 
-I'll keep this short.
+Here's the thing that quietly costs {{company_name}} {{regional_booking_term}}s every week.
 
-This is what it looks like when someone fills in a form at 11pm and gets called 43 seconds later: {{call_link}}
+Someone needs {{niche_service}} at 9pm on a Sunday. They find you, they enquire, they're ready.
 
-No human involved. Fully automatic.
+Nobody calls them back until Monday — and by then they've already gone with whoever picked up first.
 
-That's what we're offering to set up for your clinic, free for 28 days.
+Our system calls every new enquiry within 60 seconds, day or night, qualifies them, and books them straight onto your calendar. For the next 4 weeks we'll run the whole thing for free.
 
-Still interested?
+Want me to show you how it'd look for {{company_name}}?
 
-Lewis`,
+— {{your_name}}`,
   },
   {
     emailNumber: 4,
-    day: 11,
-    subjects: ["my system glitched — morning or afternoon?"],
-    body: `Hey {{first_name}},
-
-My email system showed your message was half-delivered last week — apologies if this is coming out of nowhere.
-
-I've been trying to get 5 minutes to show you how we're filling aesthetics clinics with booked consultations automatically.
-
-Quick question — if we did get on a call, would morning or afternoon work better for you?
-
-Lewis`,
-  },
-  {
-    emailNumber: 5,
-    day: 14,
+    day: 12,
     subjects: ["closing your file"],
     body: `Hey {{first_name}},
 
-I won't keep following up after this — I know your inbox is busy.
+I won't keep chasing — I know you're busy running {{company_name}}.
 
-Just wanted to leave the door open. If you ever want to see how other clinics in {{location}} are getting booked consultations handed to them automatically — no upfront cost, no contract — you know where to find me.
+Just leaving the door open. If you ever want a month of {{niche_service}} {{regional_booking_term}}s handed straight to your calendar with zero risk and no upfront cost, you know where I am.
 
-Lewis
-Aurum Growth`,
+Best,
+
+— {{your_name}}`,
   },
 ];
 
@@ -139,18 +129,25 @@ export const CALL_LINK_PLACEHOLDER = "[call recording link — add when availabl
 /** Substitutes {{vars}} in a template string. Unknown placeholders are left intact. */
 export function renderTemplate(tpl: string, vars: SequenceVars): string {
   const map: Record<string, string> = {
-    first_name:    vars.first_name,
-    business_name: vars.business_name,
-    location:      vars.location,
-    custom_hook:   vars.custom_hook,
-    call_link:     vars.call_link?.trim() || CALL_LINK_PLACEHOLDER,
+    first_name:            vars.first_name,
+    business_name:         vars.business_name,
+    company_name:          vars.company_name || vars.business_name,
+    location:              vars.location,
+    city:                  vars.city || vars.location,
+    niche_service:         vars.niche_service,
+    regional_booking_term: vars.regional_booking_term,
+    regional_revenue_term: vars.regional_revenue_term,
+    custom_hook:           vars.custom_hook,
+    ai_personalized_hook:  vars.custom_hook, // alias for the spec's tag name
+    your_name:             vars.your_name,
+    call_link:             vars.call_link?.trim() || CALL_LINK_PLACEHOLDER,
   };
   return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, k: string) => (k in map ? map[k] : m));
 }
 
 /**
  * Picks the email-1 subject variant for an A/B rotation index, then renders it.
- * Emails 2-5 have a single subject. variantIndex rotates 0,1,2 across prospects.
+ * Emails 2-4 have a single subject. variantIndex rotates across all variants.
  */
 export function renderSubject(tpl: EmailTemplate, vars: SequenceVars, variantIndex = 0): string {
   const subj = tpl.subjects[variantIndex % tpl.subjects.length] ?? tpl.subjects[0];

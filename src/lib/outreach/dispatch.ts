@@ -15,6 +15,10 @@ import { prisma } from "@/lib/prisma";
 import { injectLeads, instantlyConfigured, type InstantlyLead } from "@/lib/outreach/instantlyClient";
 import { filterSuppressed, suppress } from "@/lib/outreach/suppression";
 import { logSequenceSent } from "@/lib/outreach/messages";
+import { isRoleEmail, extractCity } from "@/lib/outreach/decisionMaker";
+import { verifierConfigured } from "@/lib/outreach/verify";
+import { nicheConfig, bookingTerm, revenueTerm } from "@/lib/outreach/niche";
+import { detectRegion } from "@/lib/outreach/regional";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -47,6 +51,7 @@ export async function dispatchProspects(opts: {
     take: opts.limit ?? 100,
     select: {
       id: true, firstName: true, companyName: true, cleanCompanyName: true, contactEmail: true, customHook: true, website: true,
+      vertical: true, location: true, country: true, verificationStatus: true,
       sequences: { orderBy: { emailNumber: "asc" }, select: { emailNumber: true, subject: true, body: true } },
     },
   }).catch(() => []);
@@ -66,18 +71,53 @@ export async function dispatchProspects(opts: {
   );
   if (sendable.length === 0) return out;
 
+  // ── Final owner-only + brutal-verify gate (defense in depth) ────────────────
+  // Never send to a generic/role inbox, and (when a verifier is configured) never
+  // send anything that isn't a confirmed-valid mailbox. Uses the STORED
+  // verificationStatus from generate-time — no extra verifier spend here.
+  const verifyOn = verifierConfigured();
+  const eligible = sendable.filter((p) => {
+    if (isRoleEmail(p.contactEmail)) return false;
+    if (verifyOn && p.verificationStatus !== "valid") return false;
+    return true;
+  });
+  const blocked = sendable.filter((p) => !eligible.includes(p));
+  out.ineligible += blocked.length;
+  await Promise.all(blocked.map((p) =>
+    prisma.outreachProspect.update({
+      where: { id: p.id },
+      data: { status: isRoleEmail(p.contactEmail) ? "rejected" : "review" },
+    }).catch(() => {}),
+  ));
+  if (eligible.length === 0) return out;
+
   if (!instantlyConfigured()) { out.notConfigured = true; return out; }
 
-  const leads: InstantlyLead[] = sendable.map((p) => ({
-    email:             p.contactEmail as string,
-    first_name:        p.firstName ?? "there",
-    custom_hook:       p.customHook ?? "",
-    custom_clean_name: p.cleanCompanyName ?? p.companyName,
-  }));
+  const yourName = process.env.OUTREACH_OWNER_NAME?.trim() || "Lewis";
+  const leads: InstantlyLead[] = eligible.map((p) => {
+    const region = detectRegion(p.country);
+    const niche = nicheConfig(p.vertical);
+    const seq1 = p.sequences[0]; // email 1 (lowest emailNumber) — fully rendered
+    const company = p.cleanCompanyName ?? p.companyName;
+    return {
+      email:             p.contactEmail as string,
+      first_name:        p.firstName ?? "there",
+      custom_hook:       p.customHook ?? "",
+      custom_clean_name: company,
+      company_name:      company,
+      subject_line:      seq1?.subject ?? "",
+      email_body:        seq1?.body ?? "",
+      city:              extractCity(p.location) || (p.location ?? ""),
+      niche_service:     niche.service,
+      regional_booking_term: bookingTerm(p.vertical, region),
+      regional_revenue_term: revenueTerm(region),
+      your_name:         yourName,
+    };
+  });
 
   const res = await injectLeads(leads);
 
-  await Promise.all(sendable.map(async (p, i) => {
+  await Promise.all(eligible.map(async (p, i) => {
     const leadId = res.leadIds[i];
     if (!leadId) { out.failed++; return; }
     out.pushed++;

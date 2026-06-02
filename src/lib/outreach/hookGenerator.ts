@@ -32,6 +32,8 @@ export interface HookInput {
   cleanName?:   string;
   location?:    string;
   vertical?:    string;
+  /** Niche-correct outcome language for the prompt (e.g. "booked jobs"). */
+  outcomeTerm?: string;
   treatments?:  string;
   website?:     string;
   websiteText?: string;
@@ -45,10 +47,13 @@ export interface HookInput {
 const VERTICAL_NOUNS: Record<string, string> = {
   aesthetics:      "aesthetics clinic",
   dental:          "dental practice",
+  cosmetic_dentistry: "dental practice",
   cosmetic_surgery: "cosmetic surgery clinic",
   hair_transplant: "hair transplant clinic",
   roofing:         "roofing company",
   hvac:            "HVAC company",
+  solar:           "solar company",
+  home_improvement: "home improvement company",
   real_estate:    "estate agency",
   legal:           "law firm",
   personal_injury: "personal injury firm",
@@ -103,6 +108,7 @@ async function writeHook(input: HookInput, critique?: string): Promise<string> {
   // Describe the business by its vertical, not a hardcoded "aesthetics clinic",
   // so the same engine writes natural hooks for any ICP (clinic, roofer, dentist…).
   const businessNoun = verticalNoun(input.vertical);
+  const outcome = input.outcomeTerm?.trim() || "booked jobs";
   const user = [
     `Write a single personalised opening line for a cold email to ${name}, ` +
       `a${input.location ? ` ${input.location}` : ""} ${businessNoun}.`,
@@ -111,10 +117,10 @@ async function writeHook(input: HookInput, critique?: string): Promise<string> {
     ``,
     `Rules:`,
     `- Maximum ${MAX_WORDS} words. One sentence.`,
-    `- Reference something specific and REAL about THEM (a named treatment, the town, their reviews, a line from their site). Specific beats clever.`,
-    `- Good angles for this kind of business, in order: a standout treatment or their reputation/reviews; the fact they've clearly got capacity to book more; or the classic gap — enquiries that come in after hours and don't get called back fast enough.`,
-    `- Do NOT assume they aren't advertising — most already run ads that just don't deliver consistently. If you mention ads at all, frame it as "running ads but the bookings aren't landing", never "you're not running ads".`,
-    `- Talk outcomes (more booked consultations / a fuller calendar), never tech or "AI".`,
+    `- Reference something specific and REAL about THEM (a named service, the town, their reviews, a line from their site). Specific beats clever.`,
+    `- Good angles for this kind of business, in order: their reputation/reviews; the fact they've clearly got capacity to take on more work; or the classic gap — enquiries that come in after hours and don't get called back fast enough.`,
+    `- Do NOT assume they aren't advertising — most already run ads that just don't deliver consistently. If you mention ads at all, frame it as "running ads but the work isn't landing", never "you're not running ads".`,
+    `- Talk outcomes (more ${outcome} / a fuller calendar), never tech or "AI".`,
     `- Ultra-casual and warm, like a text to a mate. Lowercase is fine.`,
     `- BANNED phrases (never use): "I noticed", "I came across", "impressive", "congratulations", "delve", "synergy", "reaching out", "AI-powered". Anything formal is rejected.`,
     critique ? `\nYour previous attempt was rejected by the editor: ${critique}\nWrite a better one that fixes this.` : ``,
@@ -175,10 +181,11 @@ async function critiqueHook(hook: string): Promise<Critique> {
 function fallbackHook(input: HookInput): string {
   const name = input.cleanName || input.businessName;
   const place = input.location ? ` in ${input.location}` : "";
+  const outcome = input.outcomeTerm?.trim() || "booked jobs";
   if ((input.reviewCount ?? 0) > 0) {
     return `${input.reviewCount} reviews for ${name}${place} and i bet half your enquiries never get called back in time.`;
   }
-  return `been looking at ${name}${place} and reckon you could be booking a lot more consults than you are.`;
+  return `been looking at ${name}${place} and reckon you could be getting a lot more ${outcome} than you are.`;
 }
 
 /**

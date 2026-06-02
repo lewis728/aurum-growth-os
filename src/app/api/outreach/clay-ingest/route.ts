@@ -19,6 +19,9 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeCompanyName } from "@/lib/outreach/nameSanitizer";
 import { domainOf } from "@/lib/outreach/websiteText";
 import { processProspect } from "@/lib/outreach/persist";
+import { detectCountry } from "@/lib/outreach/regional";
+import { normaliseNiche } from "@/lib/outreach/niche";
+import { isRoleEmail } from "@/lib/outreach/decisionMaker";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -70,10 +73,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const lastName    = pick(payload, ["last_name", "lastName"]);
   const email       = pick(payload, ["email", "contact_email", "email_address"]);
   const location    = pick(payload, ["city", "location", "town"]);
-  const vertical    = pick(payload, ["vertical", "category"]) || "aesthetics";
+  const title       = pick(payload, ["title", "job_title", "jobTitle", "role", "seniority", "position"]);
+  const countryRaw  = pick(payload, ["country", "country_code", "countryCode", "state", "region"]);
+  const vertical    = normaliseNiche(pick(payload, ["vertical", "category", "niche", "industry"]));
+  const country     = detectCountry(countryRaw || location);
 
   if (!companyName && !website) {
     return NextResponse.json({ ok: false, error: "company_name or website required" }, { status: 200 });
+  }
+
+  // Owner-only guarantee starts at the door: a generic/role inbox never enters the
+  // pipeline (the qualifier re-checks too, but this saves a wasted row + GPT spend).
+  if (email && isRoleEmail(email)) {
+    return NextResponse.json({ ok: true, skipped: "role inbox (not a decision-maker)", email }, { status: 200 });
   }
 
   const domain = domainOf(website);
@@ -98,7 +110,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         website: website || "",
         websiteDomain: domain,
         contactEmail: email || null,
+        contactTitle: title || null,
         location: location || null,
+        country,
         vertical,
         source: "clay",
         status: "pending",

@@ -102,7 +102,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, intent: decision.intent, action: "suppressed" }, { status: 200 });
   }
 
-  // ── Send the auto-reply (fully-auto mode) ───────────────────────────────────
+  const who = prospect.cleanCompanyName || prospect.companyName;
+
+  // ── MANUAL-REPLY MODE (default) — the owner handles all replies ─────────────
+  // Auto-replying is OFF unless OUTREACH_AUTO_REPLY="true". We still capture +
+  // classify the reply and (above) auto-suppress opt-outs; here we just hand the
+  // owner the reply plus a ready-to-paste suggested draft so they can answer.
+  const autoReply = process.env.OUTREACH_AUTO_REPLY === "true";
+  if (!autoReply) {
+    const actionable = decision.intent !== "not_interested" && decision.intent !== "auto";
+    if (actionable) {
+      await prisma.outreachProspect.update({ where: { id: prospect.id }, data: { flagged: true, flagReason: "reply — manual response needed" } }).catch(() => {});
+      await logOutreachEvent(prospect.tenantId, "flagged", `reply received (${decision.intent}) — manual response needed`, prospect.id);
+      const draft = decision.draftReply || "(reply in your own words)";
+      await notifyOwner(`📩 ${who} replied (${decision.intent}):\n\n"${replyText.slice(0, 400)}"\n\nSuggested reply (send it yourself in Instantly):\n"${draft}"`);
+    } else {
+      await notifyOwner(decision.summary); // not_interested / auto — just an FYI
+    }
+    return NextResponse.json({ ok: true, intent: decision.intent, action: "owner_notified", autoReply: false }, { status: 200 });
+  }
+
+  // ── AUTO-REPLY MODE (opt-in: OUTREACH_AUTO_REPLY="true") ────────────────────
   let sent = false;
   let handoff = false;
   if (decision.shouldSend && decision.draftReply) {
@@ -126,7 +146,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Couldn't auto-send — flag + give the owner the ready-to-paste draft.
     await prisma.outreachProspect.update({ where: { id: prospect.id }, data: { flagged: true, flagReason: "auto-reply needs manual send" } }).catch(() => {});
     await logOutreachEvent(prospect.tenantId, "flagged", "reply drafted, manual send needed", prospect.id);
-    await notifyOwner(`✍️ ${prospect.cleanCompanyName || prospect.companyName} replied (${decision.intent}). Draft ready — reply in Instantly:\n\n"${decision.draftReply || "(write a quick reply)"}"`);
+    await notifyOwner(`✍️ ${who} replied (${decision.intent}). Draft ready — reply in Instantly:\n\n"${decision.draftReply || "(write a quick reply)"}"`);
   } else {
     // Intent was not_interested / auto / flagged-no-send.
     await notifyOwner(decision.summary);
