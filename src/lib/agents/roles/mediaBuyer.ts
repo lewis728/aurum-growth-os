@@ -42,9 +42,12 @@ import {
   getAdInsights,
   getAudienceInsights,
   pauseCampaign,
+  pauseAd,
+  duplicateAdSet,
   updateCampaignBudget,
   type MetaBreakdownRow,
 } from "@/lib/services/metaAdsService";
+import { runCreativeRefresh } from "@/lib/agents/creativeRefreshLoop";
 
 const MEDIA_BUYER_NAME = "Marcus";
 const USD_TO_GBP = 1 / 1.27;
@@ -62,19 +65,23 @@ const LEARNING_PHASE_MIN_SPEND_GBP = 50;
 type MarcusActionType =
   | "PAUSE_CAMPAIGN"
   | "SCALE_BUDGET"
+  | "PAUSE_AD"          // kill ONE losing ad (targetId = ad id)
+  | "DUPLICATE_ADSET"   // scale a WINNER horizontally (targetId = ad-set id)
   | "RECOMMEND_CREATIVE_REFRESH"
   | "FLAG_LOW_CTR"
   | "NO_ACTION";
 const VALID_ACTIONS = new Set<MarcusActionType>([
-  "PAUSE_CAMPAIGN", "SCALE_BUDGET", "RECOMMEND_CREATIVE_REFRESH", "FLAG_LOW_CTR", "NO_ACTION",
+  "PAUSE_CAMPAIGN", "SCALE_BUDGET", "PAUSE_AD", "DUPLICATE_ADSET", "RECOMMEND_CREATIVE_REFRESH", "FLAG_LOW_CTR", "NO_ACTION",
 ]);
-// Actions Marcus can actually EXECUTE; the rest are advisory-only by nature.
-const EXECUTABLE = new Set<MarcusActionType>(["PAUSE_CAMPAIGN", "SCALE_BUDGET"]);
+// Actions Marcus can actually EXECUTE. PAUSE_AD + DUPLICATE_ADSET are targeted and
+// safe (the duplicate is created PAUSED, no auto-spend), so they execute autonomously.
+const EXECUTABLE = new Set<MarcusActionType>(["PAUSE_CAMPAIGN", "SCALE_BUDGET", "PAUSE_AD", "DUPLICATE_ADSET"]);
 
 interface Diagnosis {
   diagnosis:       string;
   action:          string;        // plain-English description of the chosen action
   actionType:      MarcusActionType;
+  targetId?:       string;        // ad id (PAUSE_AD) or ad-set id (DUPLICATE_ADSET)
   expectedOutcome: string;
   watchFor:        string;
   confidence:      number;        // 0-1
@@ -279,11 +286,14 @@ export async function runMediaBuyerCycle(
                 "Use the PRO SIGNALS block (pre-computed fatigue/overlap flags) as ground truth. " +
                 "Then choose exactly ONE action. Respect the client's brief, compliance notes, and learnings. " +
                 'Respond ONLY as JSON: {"diagnosis": string, "action": string, "actionType": ' +
-                '"PAUSE_CAMPAIGN"|"SCALE_BUDGET"|"RECOMMEND_CREATIVE_REFRESH"|"FLAG_LOW_CTR"|"NO_ACTION", ' +
+                '"PAUSE_CAMPAIGN"|"SCALE_BUDGET"|"PAUSE_AD"|"DUPLICATE_ADSET"|"RECOMMEND_CREATIVE_REFRESH"|"FLAG_LOW_CTR"|"NO_ACTION", ' +
+                '"targetId": string (REQUIRED for PAUSE_AD = the ad id, and DUPLICATE_ADSET = the ad-set id; use the ids from the AD SETS / ADS evidence rows), ' +
                 '"expectedOutcome": string, "watchFor": string, "confidence": number (0-1)}. ' +
-                "PAUSE_CAMPAIGN only if performance is genuinely bad (CPL far above benchmark with real spend, few leads). " +
+                "PAUSE_CAMPAIGN only if the WHOLE campaign is genuinely bad (CPL far above benchmark with real spend, few leads). " +
+                "PAUSE_AD when ONE specific ad is the clear loser (high frequency / low CTR / high CPL at AD level while others are fine) — kill just that ad, set targetId to its id; far better than pausing the campaign. " +
                 "SCALE_BUDGET only if genuinely strong (CPL well below benchmark with volume) AND frequency is healthy (<2.5). " +
-                "If frequency ≥3.0, prefer RECOMMEND_CREATIVE_REFRESH over scaling. Prefer NO_ACTION over a low-confidence guess.\n\n" +
+                "DUPLICATE_ADSET to scale a clear WINNER horizontally — set targetId to the best ad set's id; it creates a PAUSED copy to double down (no auto-spend). " +
+                "If frequency ≥3.0, prefer RECOMMEND_CREATIVE_REFRESH (Marcus auto-generates + pre-validates a fresh creative) over scaling. Prefer NO_ACTION over a low-confidence guess.\n\n" +
                 "Follow this 6-STEP DIAGNOSTIC FRAMEWORK, letting the EXPERT PRECEDENTS inform each step:\n" +
                 "1. OBSERVE — read ALL the data (campaign, ad set, ad/creative, audience, frequency, CPM history).\n" +
                 "2. HYPOTHESISE — list the plausible causes of the current performance.\n" +
@@ -309,6 +319,7 @@ export async function runMediaBuyerCycle(
           diagnosis:       typeof parsed.diagnosis === "string" ? parsed.diagnosis : "",
           action:          typeof parsed.action === "string" ? parsed.action : "",
           actionType:      VALID_ACTIONS.has(at) ? at : "NO_ACTION",
+          targetId:        typeof parsed.targetId === "string" && parsed.targetId.trim() ? parsed.targetId.trim() : undefined,
           expectedOutcome: typeof parsed.expectedOutcome === "string" ? parsed.expectedOutcome : "",
           watchFor:        typeof parsed.watchFor === "string" ? parsed.watchFor : "",
           confidence:      typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0,
@@ -363,8 +374,15 @@ export async function runMediaBuyerCycle(
       return { blueprintId, status: "recommended", actionType: diagnosis.actionType };
     }
 
-    // Advisory-by-nature actions (no Meta mutation exists for them yet).
+    // Advisory-by-nature actions. CREATIVE REFRESH now CLOSES THE LOOP: Marcus
+    // auto-generates + pre-validates (15-persona sim) a fresh creative and queues it
+    // for one-tap approval, instead of just flagging "refresh needed".
     if (!EXECUTABLE.has(diagnosis.actionType)) {
+      if (diagnosis.actionType === "RECOMMEND_CREATIVE_REFRESH") {
+        void runCreativeRefresh({ blueprintId, tenantId, reason: diagnosis.diagnosis.slice(0, 300) || "creative fatigue" });
+        await logAction(diagnosis.actionType, chain, "Auto-generating a fresh, pre-validated creative for your approval (closed creative-refresh loop)");
+        return { blueprintId, status: "recommended", actionType: diagnosis.actionType };
+      }
       await logAction(diagnosis.actionType, chain, diagnosis.actionType === "NO_ACTION" ? "Holding steady — no change needed" : "Flagged for review");
       return { blueprintId, status: diagnosis.actionType === "NO_ACTION" ? "no_action" : "recommended", actionType: diagnosis.actionType };
     }
@@ -383,6 +401,48 @@ export async function runMediaBuyerCycle(
         "Recommendation only — senior-buyer review vetoed immediate execution",
       );
       return { blueprintId, status: "recommended", actionType: diagnosis.actionType };
+    }
+
+    // ── PAUSE_AD — kill ONE losing ad, leave the campaign + winners running ────
+    if (diagnosis.actionType === "PAUSE_AD") {
+      if (!diagnosis.targetId) {
+        await logAction("PAUSE_AD", chain, "Recommendation only — no specific ad id was identified to pause.");
+        return { blueprintId, status: "recommended", actionType: "PAUSE_AD" };
+      }
+      try {
+        await pauseAd(diagnosis.targetId, tenantId);
+        await logAction("PAUSE_AD", chain, `Paused the losing ad ${diagnosis.targetId} — campaign and winning ads keep running.`);
+        void trackDecisionOutcomeInBackground({
+          blueprintId, tenantId, vertical: blueprint.vertical, metaCampaignId,
+          actionType: "PAUSE_AD", situation: situationText, diagnosis: diagnosis.diagnosis, action: diagnosis.action, baselineCpl: campaign.cpl,
+        });
+        return { blueprintId, status: "acted", actionType: "PAUSE_AD" };
+      } catch (err) {
+        await logAction("PAUSE_AD", chain, `Tried to pause ad ${diagnosis.targetId} but the change didn't go through: ${err instanceof Error ? err.message : "unknown error"}`);
+        return { blueprintId, status: "acted", actionType: "PAUSE_AD" };
+      }
+    }
+
+    // ── DUPLICATE_ADSET — scale a winner horizontally (PAUSED copy, no auto-spend) ─
+    if (diagnosis.actionType === "DUPLICATE_ADSET") {
+      const targetAdSet = diagnosis.targetId ?? metaAdSetId;
+      if (!targetAdSet) {
+        await logAction("DUPLICATE_ADSET", chain, "Recommendation only — no ad set id was identified to duplicate.");
+        return { blueprintId, status: "recommended", actionType: "DUPLICATE_ADSET" };
+      }
+      try {
+        const newId = await duplicateAdSet(targetAdSet, tenantId);
+        await logAction(
+          "DUPLICATE_ADSET", chain,
+          newId
+            ? `Duplicated winning ad set ${targetAdSet} → ${newId} (PAUSED copy ready to scale — activate to double down).`
+            : `Requested a duplicate of ad set ${targetAdSet} (Meta returned no new id).`,
+        );
+        return { blueprintId, status: "acted", actionType: "DUPLICATE_ADSET" };
+      } catch (err) {
+        await logAction("DUPLICATE_ADSET", chain, `Tried to duplicate ad set ${targetAdSet} but the change didn't go through: ${err instanceof Error ? err.message : "unknown error"}`);
+        return { blueprintId, status: "acted", actionType: "DUPLICATE_ADSET" };
+      }
     }
 
     // ── PAUSE_CAMPAIGN ────────────────────────────────────────────────────────

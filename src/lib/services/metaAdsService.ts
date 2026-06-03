@@ -357,6 +357,34 @@ export async function resumeCampaign(
   );
 }
 
+/** Pauses a single Meta AD (kill one losing creative without touching the campaign). */
+export async function pauseAd(adId: string, tenantId: string): Promise<void> {
+  const { accessToken } = await getTenantMetaIds(tenantId);
+  await withRetry(
+    () => metaPostStatus<{ success: boolean }>(`/${adId}`, { status: "PAUSED" }, accessToken),
+    { maxAttempts: 3, baseDelayMs: 500, label: "metaAdsService.pauseAd" }
+  );
+}
+
+/**
+ * Duplicates a winning ad set (scale horizontally). Creates a PAUSED deep copy so it
+ * never auto-spends — the owner/agent activates it to "double down" on the winner.
+ * Returns the new ad-set id (or null if Meta didn't return one).
+ */
+export async function duplicateAdSet(adSetId: string, tenantId: string): Promise<string | null> {
+  const { accessToken } = await getTenantMetaIds(tenantId);
+  const result = await withRetry(
+    () =>
+      metaPost<{ copied_adset_id?: string; id?: string; ad_object_ids?: Array<{ copied_id?: string }> }>(
+        `/${adSetId}/copies`,
+        { deep_copy: true, status_option: "PAUSED" },
+        accessToken
+      ),
+    { maxAttempts: 3, baseDelayMs: 500, label: "metaAdsService.duplicateAdSet" }
+  );
+  return result.copied_adset_id ?? result.id ?? result.ad_object_ids?.[0]?.copied_id ?? null;
+}
+
 /** Fetches campaign insights for the given date range. */
 export async function getCampaignInsights(
   campaignId: string,
