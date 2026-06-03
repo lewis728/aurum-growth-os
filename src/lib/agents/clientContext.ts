@@ -98,6 +98,15 @@ export function renderBriefBlock(brief: ClientBrief | null): string {
     objections ? `Objection responses:\n${objections}` : null,
     line("COMPLIANCE — never claim/say", brief.complianceNotes),
     line("Website summary", brief.websiteSummary),
+    // Deep onboarding research — the proven winning strategy for THIS business in
+    // THIS area, and Marcus's exact optimisation manual. These are the highest-value
+    // operating context: the media buyer should follow the playbook precisely.
+    brief.winningStrategy
+      ? `WINNING STRATEGY (proven for this business in this area — run this):\n${brief.winningStrategy}`
+      : null,
+    brief.mediaBuyerPlaybook
+      ? `MEDIA-BUYER OPTIMISATION PLAYBOOK (follow these rules + target bands exactly):\n${brief.mediaBuyerPlaybook}`
+      : null,
     // Kai's nightly distillation — what we've LEARNED about this specific client.
     // Surfaced to every role so the whole team compounds knowledge over time.
     brief.distilledLearnings

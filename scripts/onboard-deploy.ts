@@ -28,7 +28,7 @@ import { deployCaller } from "../src/lib/agents/roles/caller";
 import { createCampaign, createAdSet } from "../src/lib/services/metaAdsService";
 import type { CampaignBlueprint } from "../src/types/campaignBlueprint";
 
-const APP = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://aurum-growth-os.vercel.app").replace(/\/$/, "");
+const APP = (process.env.ONBOARD_APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://aurum-growth-os.vercel.app").replace(/\/$/, "");
 
 function parseArgs(argv: string[]): { opts: Record<string, string>; flags: Set<string> } {
   const opts: Record<string, string> = {};

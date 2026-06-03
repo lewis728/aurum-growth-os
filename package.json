@@ -15,6 +15,7 @@
     "onboard:research": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/onboard-research.ts",
     "onboard:provision": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/onboard-provision.ts",
     "onboard:deploy": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/onboard-deploy.ts",
+    "onboard:apply": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs scripts/onboard-apply-research.ts",
     "train": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts",
     "train:quick": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/run-batch.cjs src/lib/training/trainingRunner.ts --quick",
     "train:estimate": "tsx src/lib/training/trainingRunner.ts --dry-run"

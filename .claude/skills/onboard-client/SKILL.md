@@ -74,10 +74,15 @@ In one message: **niche** (roofing | home_improvement), **business name**, **web
 **booking link** (Calendly/Google or "none yet"), **agent name** (default "Sophie"), optional
 **client contact name + WhatsApp**. Everything else you research — don't interrogate him.
 
-### Step 2 — Research
+### Step 2 — Research (shallow scrape + DEEP workflow)
+First the fast scrape:
 `npm run onboard:research -- --niche <niche> --name "<business>" --website "<url>" --city "<city>" --country <ISO>`
-Read the dossier: their services + reach + reviews; which local competitors are already
-advertising on Meta (the competitor set + angle gaps). Pick the winning angle.
+Then run the **deep research workflow** — parallel agents research the local market +
+competitors (live web + Meta Ad Library), the winning ad strategy, the targeting/creative
+plan, AND Marcus's optimisation playbook, then synthesise:
+`Workflow({ name: "deep-client-research", args: { businessName, website, city, country, niche, dailyBudgetGbp, usps } })`
+Read its `synthesis` — that IS the winning strategy + Marcus's operating manual. Save the
+full workflow result JSON to a temp file (you'll apply it in Step 4b).
 
 ### Step 3 — Author the FULL strategy (grounded in the research, niche-specialised)
 Produce all of this and write it to a brief JSON file (shape below):
@@ -96,9 +101,16 @@ Produce all of this and write it to a brief JSON file (shape below):
 
 ### Step 4 — Provision the draft + show Lewis
 Write the JSON, then: `npm run onboard:provision -- --brief <path.json>`
-It returns a **blueprintId** + a live **`/lp/<id>` preview URL** (and writes the full brief +
-media plan so Marcus already has everything). Show Lewis: the plan summary (angle, targeting,
-budget, CPL target) + the ad copy + **the preview link**. Then ask: "Go live?"
+It returns a **blueprintId** + a live **`/lp/<id>` preview URL**.
+
+### Step 4b — Apply the deep research (gives Marcus his operating manual)
+`npm run onboard:apply -- --blueprint <id> --research <path-to-workflow-result.json>`
+This writes `winningStrategy` + `mediaBuyerPlaybook` + `localCplBenchmark` + `competitorSnapshot`
++ `geoIntelligence` onto the ClientBrief and the research targeting onto the blueprint. From
+this point **Marcus reads the winning strategy + the exact optimisation playbook on every
+4-hour cycle** (via `buildClientContext`), reasons against the trajectory, researches anomalies
+live, and adversarially self-checks before acting. Show Lewis: the plan summary (angle, targeting,
+budget, CPL bands) + the ad copy + **the preview link**. Then ask: "Go live?"
 
 ### Step 5 — Deploy (on Lewis's yes)
 `npm run onboard:deploy -- --blueprint <id> --go-live --with-ads`

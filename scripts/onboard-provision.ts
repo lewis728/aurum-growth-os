@@ -26,7 +26,9 @@ import { normaliseNiche } from "../src/lib/outreach/niche";
 import { detectCountry } from "../src/lib/outreach/regional";
 
 const GBP_TO_USD = 1.27;
-const APP = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://aurum-growth-os.vercel.app").replace(/\/$/, "");
+// Prefer ONBOARD_APP_URL for onboarding so the saved landing/ad URL is the PROD app,
+// not a dev NEXT_PUBLIC_APP_URL=localhost (which would break the Meta ad link).
+const APP = (process.env.ONBOARD_APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://aurum-growth-os.vercel.app").replace(/\/$/, "");
 
 interface ObjectionPair { objection: string; response: string }
 
@@ -46,6 +48,12 @@ interface OnboardBrief {
   approvalThresholdGbp?:  number;
   mediaPlan?:             string;  // plain-English plan for the record + Marcus
   adCopy?:                string;  // the ad copy variants Lewis approved
+  // ── Deep onboarding research (read by Marcus via clientContext) ──────────────
+  winningStrategy?:       string;  // proven angle/offer/creative/funnel for this business+area
+  mediaBuyerPlaybook?:    string;  // exact optimisation manual: bands + scale/pause/refresh rules
+  localCplBenchmark?:     number;  // local CPL to optimise toward
+  competitorSnapshot?:    Record<string, unknown>;  // { count, notable[] } from the research
+  geoIntelligence?:       Record<string, unknown>;  // city-specific market intel
 }
 
 interface OnboardTargeting {
@@ -176,6 +184,11 @@ async function main(): Promise<void> {
         keyUSPs:                b.keyUSPs?.trim() || null,
         objectionResponses:     objectionJson as unknown as Prisma.InputJsonValue,
         complianceNotes:        b.complianceNotes?.trim() || null,
+        winningStrategy:        b.winningStrategy?.trim() || null,
+        mediaBuyerPlaybook:     b.mediaBuyerPlaybook?.trim() || null,
+        localCplBenchmark:      typeof b.localCplBenchmark === "number" ? b.localCplBenchmark : null,
+        competitorSnapshot:     b.competitorSnapshot ? (b.competitorSnapshot as Prisma.InputJsonValue) : undefined,
+        geoIntelligence:        b.geoIntelligence ? (b.geoIntelligence as Prisma.InputJsonValue) : undefined,
         brandTone:              b.brandTone?.trim() || null,
         badLeadSignals:         b.badLeadSignals?.trim() || null,
         competitorNames:        b.competitorNames?.trim() || null,

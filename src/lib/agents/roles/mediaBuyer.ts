@@ -35,6 +35,7 @@ import { runAgentReasoningCycle, type ClientBriefGuardrails } from "@/lib/servic
 import { maybeAlertForAction } from "@/lib/services/alertService";
 import { retrieveSimilarCases, formatPrecedentsForPrompt } from "@/lib/intelligence/decisionLibrary";
 import { trackDecisionOutcomeInBackground } from "@/lib/intelligence/selfLearningPipeline";
+import { computeTrend, detectAnomaly, researchAnomaly, verifyDecision } from "@/lib/agents/marcusReasoning";
 import {
   getCampaignInsightsSummary,
   getAdSetInsights,
@@ -140,7 +141,7 @@ export async function runMediaBuyerCycle(
     // ── Load blueprint ────────────────────────────────────────────────────────
     const blueprint = await prisma.campaignBlueprint.findFirst({
       where:  { id: blueprintId, tenantId },
-      select: { status: true, businessName: true, vertical: true, dailyBudgetUsd: true, mediaBuying: true },
+      select: { status: true, businessName: true, vertical: true, targetLocation: true, dailyBudgetUsd: true, mediaBuying: true },
     });
     if (!blueprint || blueprint.status !== "live") return { blueprintId, status: "skipped" };
 
@@ -193,6 +194,23 @@ export async function runMediaBuyerCycle(
     const ads      = adR.status === "fulfilled"      ? adR.value      : [];
     const audience = audienceR.status === "fulfilled" ? audienceR.value : { demographics: [], placements: [] };
 
+    // ── GODLIKE LAYER — trajectory + instant research a human can't do live ────
+    // Trajectory: compare this window to the PRIOR window (never pause a recovering
+    // campaign; never scale a degrading one). Anomaly: if a metric moved sharply,
+    // INSTANTLY research the real world (live web + Meta Ad Library) to find WHY
+    // before deciding. Both fail-safe — never block the cycle.
+    const priorCampaign = await getCampaignInsightsSummary(
+      metaCampaignId, { since: dateRange(OBSERVE_DAYS * 2).since, until: range.since }, tenantId,
+    ).catch(() => null);
+    const trend = computeTrend(campaign, priorCampaign);
+    const anomaly = detectAnomaly(campaign, priorCampaign, benchmark);
+    const researchFinding = anomaly.anomalous
+      ? await researchAnomaly({
+          businessName: blueprint.businessName, city: blueprint.targetLocation ?? "",
+          vertical: blueprint.vertical, reasons: anomaly.reasons,
+        })
+      : "";
+
     // ── STEP 2 — DIAGNOSE (GPT-4o causal reasoning) ───────────────────────────
     const proFlags = proSignals(campaign, ads);
     const evidence = [
@@ -203,6 +221,7 @@ export async function runMediaBuyerCycle(
       ctx.promptBlock, // includes the brief + Kai's nightly distilledLearnings
       ``,
       `CAMPAIGN (last ${OBSERVE_DAYS}d): spend £${campaign.spend.toFixed(0)}, ${campaign.leads} leads/conversions, CPL £${campaign.cpl.toFixed(2)}, CTR ${campaign.ctr.toFixed(2)}%, freq ${campaign.frequency.toFixed(1)}, reach ${campaign.reach}, CPM £${campaign.cpm.toFixed(2)}, ${campaign.impressions} impressions`,
+      trend.summary,
       campaign.leads < LEARNING_PHASE_CONVERSIONS && campaign.spend >= LEARNING_PHASE_MIN_SPEND_GBP
         ? `LEARNING PHASE: only ${campaign.leads}/${LEARNING_PHASE_CONVERSIONS} conversions — this campaign is still in Meta's learning phase. Do NOT pause or scale; it needs time to exit. Recommend only.`
         : `LEARNING PHASE: cleared (${campaign.leads} conversions) — normal pause/scale logic applies.`,
@@ -211,6 +230,7 @@ export async function runMediaBuyerCycle(
       summariseRows("AUDIENCE — demographics", audience.demographics, (r) => `${r.age ?? "?"}/${r.gender ?? "?"}`),
       summariseRows("AUDIENCE — placements", audience.placements, (r) => r.publisherPlatform ?? "?"),
       proFlags.length ? `PRO SIGNALS (heuristic, pre-computed):\n${proFlags.map((f) => `  • ${f}`).join("\n")}` : "PRO SIGNALS: none firing.",
+      researchFinding || "LIVE RESEARCH: not triggered — metrics within normal bands this cycle.",
     ].join("\n");
 
     // Learning-phase status (hoisted — referenced again in the DECIDE step's hard guardrail).
@@ -228,6 +248,7 @@ export async function runMediaBuyerCycle(
         `CPL £${campaign.cpl.toFixed(2)}${benchmark != null ? ` vs benchmark £${benchmark.toFixed(2)}` : ""}, ` +
         `CTR ${campaign.ctr.toFixed(2)}%, frequency ${campaign.frequency.toFixed(1)}, CPM £${campaign.cpm.toFixed(2)}.`,
       inLearningPhase ? `Still in Meta's learning phase (${campaign.leads}/${LEARNING_PHASE_CONVERSIONS} conversions).` : `Past the learning phase.`,
+      trend.summary,
       proFlags.length ? `Signals: ${proFlags.join(" ")}` : `No fatigue/overlap signals firing.`,
     ].join(" ");
     const precedents = await retrieveSimilarCases(blueprint.vertical, situationText, 5);
@@ -270,7 +291,12 @@ export async function runMediaBuyerCycle(
                 "4. DECIDE — choose exactly ONE action within the safety guardrails.\n" +
                 "5. PREDICT — state the expected outcome and the specific number you expect to move.\n" +
                 "6. MONITOR — state exactly what you'll watch next cycle to confirm or refute the call.\n" +
-                "Put steps 1-3 in `diagnosis`, step 4 in `action`/`actionType`, step 5 in `expectedOutcome`, step 6 in `watchFor`.",
+                "Put steps 1-3 in `diagnosis`, step 4 in `action`/`actionType`, step 5 in `expectedOutcome`, step 6 in `watchFor`.\n\n" +
+                "CLIENT-SPECIFIC OVERRIDE: if the evidence contains a MEDIA-BUYER OPTIMISATION PLAYBOOK or WINNING STRATEGY, " +
+                "FOLLOW its exact target bands (CPL/CTR/CPM/frequency) and lever priority — they are tuned to THIS client in " +
+                "THIS market and OVERRIDE the generic rules above. Read the TREND line and any LIVE RESEARCH: never PAUSE a " +
+                "campaign whose CPL is falling fast (it's recovering), never SCALE one whose CPL is rising, and use the live " +
+                "research to explain the CAUSE (competitor promo, storm, seasonality) before you act.",
             },
             { role: "system", content: cbrBlock },
             { role: "user", content: `${evidence}\n\nDiagnose and decide now.` },
@@ -341,6 +367,22 @@ export async function runMediaBuyerCycle(
     if (!EXECUTABLE.has(diagnosis.actionType)) {
       await logAction(diagnosis.actionType, chain, diagnosis.actionType === "NO_ACTION" ? "Holding steady — no change needed" : "Flagged for review");
       return { blueprintId, status: diagnosis.actionType === "NO_ACTION" ? "no_action" : "recommended", actionType: diagnosis.actionType };
+    }
+
+    // ── ADVERSARIAL SELF-CHECK (executable actions only, AFTER the guardrails) ──
+    // A skeptical 30-year senior buyer must FAIL to refute the move before money
+    // moves — the panel-of-experts pass that beats a single human's snap call.
+    // It can VETO (→ recommendation) but never block (defaults to uphold on error).
+    const verdict = await verifyDecision({
+      action: `${diagnosis.actionType}: ${diagnosis.action}`, chain, evidence, trendSummary: trend.summary,
+    });
+    if (!verdict.uphold) {
+      await logAction(
+        diagnosis.actionType,
+        `${chain}\n\nHELD by adversarial review: ${verdict.reason}`,
+        "Recommendation only — senior-buyer review vetoed immediate execution",
+      );
+      return { blueprintId, status: "recommended", actionType: diagnosis.actionType };
     }
 
     // ── PAUSE_CAMPAIGN ────────────────────────────────────────────────────────
