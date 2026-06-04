@@ -37,3 +37,4 @@ next-env.d.ts
 
 /app/generated/prisma
 .env.local
+tmp/

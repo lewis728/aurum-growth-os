@@ -12,9 +12,10 @@ import { withRetry, isTransientError } from "@/lib/utils/withRetry";
 
 const CH_BASE = "https://api.company-information.service.gov.uk";
 
-// Roofing-relevant SIC codes. 43910 = "Roofing activities" (the core); the others
-// catch roofers filed under broader construction codes.
-export const ROOFING_SIC_CODES = ["43910", "43999", "43390"];
+// 43910 = "Roofing activities" — the ONE clean roofing code (~18.9k active). We do
+// NOT use 43999 (catch-all: scaffolders/damp-proofers) or 43390 (painting & glazing,
+// not roofers) by default — they'd pollute the list. Add via --sic if ever wanted.
+export const ROOFING_SIC_CODES = ["43910"];
 
 export function companiesHouseConfigured(): boolean {
   return Boolean(process.env.COMPANIES_HOUSE_API_KEY);
@@ -78,48 +79,57 @@ export async function searchRoofingCompanies(opts?: {
   const max = opts?.max ?? 100_000;
   const seen = new Set<string>();
   const out: CHCompany[] = [];
+  const size = 100;
+
+  // Advanced Search caps each query at 10,000 results. A SIC like 43910 has ~19k,
+  // so we SEGMENT by incorporation year (each year is well under the cap) and union
+  // — newest years first (most relevant). Union dedupes by company number.
+  const currentYear = new Date().getFullYear();
+  const START_YEAR = 1970;
 
   for (const sic of sicCodes) {
-    let start = 0;
-    const size = 100;
-    for (;;) {
+    for (let year = currentYear; year >= START_YEAR; year--) {
       if (out.length >= max) return out;
-      let data: CHAdvancedResponse;
-      try {
-        data = await chGet<CHAdvancedResponse>(
-          `/advanced-search/companies?sic_codes=${encodeURIComponent(sic)}&company_status=${encodeURIComponent(status)}&size=${size}&start_index=${start}`,
-        );
-      } catch (err) {
-        console.error(`[companiesHouse] search ${sic}@${start} failed:`, err instanceof Error ? err.message : err);
-        break;
-      }
-      const items = data.items ?? [];
-      if (items.length === 0) break;
+      let start = 0;
+      for (;;) {
+        if (out.length >= max) return out;
+        let data: CHAdvancedResponse;
+        try {
+          data = await chGet<CHAdvancedResponse>(
+            `/advanced-search/companies?sic_codes=${encodeURIComponent(sic)}&company_status=${encodeURIComponent(status)}` +
+            `&incorporated_from=${year}-01-01&incorporated_to=${year}-12-31&size=${size}&start_index=${start}`,
+          );
+        } catch (err) {
+          console.error(`[companiesHouse] ${sic}/${year}@${start} failed:`, err instanceof Error ? err.message : err);
+          break;
+        }
+        const items = data.items ?? [];
+        if (items.length === 0) break;
 
-      const page: CHCompany[] = [];
-      for (const it of items) {
-        const number = it.company_number ?? "";
-        if (!number || seen.has(number)) continue;
-        seen.add(number);
-        const c: CHCompany = {
-          companyNumber: number,
-          companyName:   (it.company_name ?? "").trim(),
-          status:        it.company_status ?? "",
-          incorporated:  it.date_of_creation ?? null,
-          locality:      it.registered_office_address?.locality ?? null,
-          region:        it.registered_office_address?.region ?? null,
-          postcode:      it.registered_office_address?.postal_code ?? null,
-          sicCodes:      it.sic_codes ?? [],
-        };
-        page.push(c); out.push(c);
-        if (out.length >= max) break;
-      }
-      if (page.length && opts?.onPage) await opts.onPage(page);
+        const page: CHCompany[] = [];
+        for (const it of items) {
+          const number = it.company_number ?? "";
+          if (!number || seen.has(number)) continue;
+          seen.add(number);
+          const c: CHCompany = {
+            companyNumber: number,
+            companyName:   (it.company_name ?? "").trim(),
+            status:        it.company_status ?? "",
+            incorporated:  it.date_of_creation ?? null,
+            locality:      it.registered_office_address?.locality ?? null,
+            region:        it.registered_office_address?.region ?? null,
+            postcode:      it.registered_office_address?.postal_code ?? null,
+            sicCodes:      it.sic_codes ?? [],
+          };
+          page.push(c); out.push(c);
+          if (out.length >= max) break;
+        }
+        if (page.length && opts?.onPage) await opts.onPage(page);
 
-      start += size;
-      // Advanced Search caps how deep you can page; stop at the documented ceiling.
-      if (start >= 9900 || start >= (data.hits ?? 0)) break;
-      await sleep(250); // stay well under 600 req / 5 min
+        start += size;
+        if (start >= 9900 || start >= (data.hits ?? 0)) break;
+        await sleep(220); // stay well under 600 req / 5 min
+      }
     }
   }
   return out;
