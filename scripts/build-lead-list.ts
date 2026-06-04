@@ -25,9 +25,11 @@ import * as path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
+import * as fs from "fs";
 import { prisma } from "../src/lib/prisma";
-import { sourceBusinesses, sourcingConfigured } from "../src/lib/leads/sourcing";
+import { sourceBusinesses, sourcingConfigured, type SourcedBusiness } from "../src/lib/leads/sourcing";
 import { findOwnerEmail, emailFinderConfigured } from "../src/lib/leads/emailFinder";
+import { guessOwnerEmail } from "../src/lib/leads/patternGuess";
 import { isRoleEmail } from "../src/lib/outreach/decisionMaker";
 import { sanitizeCompanyName } from "../src/lib/outreach/nameSanitizer";
 import { domainOf } from "../src/lib/outreach/websiteText";
@@ -69,6 +71,93 @@ async function resolveTenant(arg?: string): Promise<string> {
 interface Tally { sourced: number; created: number; generated: number; review: number; rejected: number; noWebsite: number; noEmail: number; duplicate: number; errored: number }
 const zero = (): Tally => ({ sourced: 0, created: 0, generated: 0, review: 0, rejected: 0, noWebsite: 0, noEmail: 0, duplicate: 0, errored: 0 });
 
+type IngestResult = "noWebsite" | "duplicate" | "noEmail" | "errored" | "generated" | "review" | "rejected";
+
+function tallyAdd(total: Tally, k: IngestResult): void {
+  if (k === "noWebsite") total.noWebsite++;
+  else if (k === "duplicate") total.duplicate++;
+  else if (k === "noEmail") { total.noEmail++; total.created++; }
+  else if (k === "errored") total.errored++;
+  else { total.created++; total[k]++; }
+}
+
+/**
+ * One sourced business → verified, qualified, personalised, stored lead. Shared by
+ * the Maps-query mode and the Companies House --csv mode. owner = the director name
+ * (from Companies House) used for pattern-guessing the email when no finder hits.
+ */
+async function ingestOne(
+  b: SourcedBusiness, tenantId: string, niche: string, seen: Set<string>,
+  owner?: { firstName?: string | null; lastName?: string | null },
+): Promise<IngestResult> {
+  const domain = domainOf(b.website ?? "");
+  if (!domain) return "noWebsite";
+  if (seen.has(domain)) return "duplicate";
+  seen.add(domain);
+  const dup = await prisma.outreachProspect.findFirst({ where: { tenantId, websiteDomain: domain }, select: { id: true } }).catch(() => null);
+  if (dup) return "duplicate";
+
+  // Email waterfall: on-site → finder (by domain) → pattern-guess (owner name + domain).
+  let email = b.email && !isRoleEmail(b.email) ? b.email : null;
+  if (!email && emailFinderConfigured()) {
+    const found = await findOwnerEmail(domain);
+    if (found && !isRoleEmail(found.email)) email = found.email;
+  }
+  if (!email && owner && (owner.firstName || owner.lastName)) {
+    const g = await guessOwnerEmail({ firstName: owner.firstName, lastName: owner.lastName, domain });
+    if (g) email = g.email;
+  }
+
+  const base = {
+    tenantId, firstName: owner?.firstName ?? null, lastName: owner?.lastName ?? null,
+    companyName: b.name, cleanCompanyName: sanitizeCompanyName(b.name) || null,
+    website: b.website ?? "", websiteDomain: domain, location: b.city ?? null, country: "GB",
+    vertical: niche, source: "scrape", reviewCount: b.reviewCount ?? null, reviewRating: b.rating ?? null,
+  };
+
+  if (!email) {
+    await prisma.outreachProspect.create({ data: { ...base, status: "review", qualifyReason: "No owner email found" } }).catch(() => {});
+    return "noEmail";
+  }
+  const created = await prisma.outreachProspect.create({ data: { ...base, contactEmail: email, status: "pending" } }).catch(() => null);
+  if (!created) return "errored";
+  const res = await processProspect({ prospectId: created.id, tenantId, knownReviewCount: b.reviewCount ?? null, knownReviewRating: b.rating ?? null });
+  if (res.status === "generated") return "generated";
+  if (res.status === "review") return "review";
+  if (res.status === "rejected") return "rejected";
+  return "errored";
+}
+
+interface CsvRow { companyName: string; firstName: string | null; lastName: string | null; locality: string | null }
+
+/** Minimal CSV reader for the Companies House export (quoted fields, header row). */
+function readCompaniesHouseCsv(file: string): CsvRow[] {
+  const text = fs.readFileSync(file, "utf8");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const parse = (line: string): string[] => {
+    const out: string[] = []; let cur = ""; let q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+    }
+    out.push(cur); return out;
+  };
+  const header = parse(lines[0]).map((h) => h.trim());
+  const idx = (name: string) => header.indexOf(name);
+  const ci = { name: idx("companyName"), fn: idx("firstName"), ln: idx("lastName"), loc: idx("locality") };
+  return lines.slice(1).map((l) => {
+    const f = parse(l);
+    return {
+      companyName: (f[ci.name] ?? "").trim(),
+      firstName: (f[ci.fn] ?? "").trim() || null,
+      lastName: (f[ci.ln] ?? "").trim() || null,
+      locality: (f[ci.loc] ?? "").trim() || null,
+    };
+  }).filter((r) => r.companyName);
+}
+
 async function main(): Promise<void> {
   const { opts, flags } = parseArgs(process.argv.slice(2));
   const niche = normaliseNiche(opts.niche ?? "roofing");
@@ -100,64 +189,29 @@ async function main(): Promise<void> {
   const total = zero();
   const seen = new Set<string>();
 
+  // ── Companies House CSV mode: enrich the free register into emailable leads ──
+  if (opts.csv) {
+    const rows = readCompaniesHouseCsv(path.resolve(process.cwd(), opts.csv));
+    console.log(`CSV mode — ${rows.length} companies from ${opts.csv}`);
+    const settled = await mapPool(rows, concurrency, async (r) => {
+      total.sourced++;
+      const hits = await sourceBusinesses(`${r.companyName} ${r.locality ?? ""}, UK`.trim(), 1);
+      const b: SourcedBusiness = hits[0] ?? { name: r.companyName, website: null, phone: null, city: r.locality, address: null, rating: null, reviewCount: null, email: null };
+      return ingestOne(b, tenantId, niche, seen, { firstName: r.firstName, lastName: r.lastName });
+    });
+    for (const s of settled) { if (s.status !== "fulfilled") { total.errored++; continue; } tallyAdd(total, s.value); }
+    console.log("\n══════════ FINAL ══════════"); console.log(JSON.stringify(total, null, 2));
+    console.log(`\n${total.generated} verified + personalised leads READY in the database (status "generated").`);
+    await prisma.$disconnect(); return;
+  }
+
   for (const query of queries) {
     const businesses = await sourceBusinesses(query, limit);
     total.sourced += businesses.length;
     console.log(`\n[${query}] sourced ${businesses.length}`);
 
-    const settled = await mapPool(businesses, concurrency, async (b) => {
-      const domain = domainOf(b.website ?? "");
-      if (!domain) { return "noWebsite" as const; }
-      if (seen.has(domain)) { return "duplicate" as const; }
-      seen.add(domain);
-
-      const dup = await prisma.outreachProspect.findFirst({ where: { tenantId, websiteDomain: domain }, select: { id: true } }).catch(() => null);
-      if (dup) return "duplicate" as const;
-
-      // Real owner email: prefer a non-role on-site email, else find it.
-      let email = b.email && !isRoleEmail(b.email) ? b.email : null;
-      if (!email && emailFinderConfigured()) {
-        const found = await findOwnerEmail(domain);
-        if (found && !isRoleEmail(found.email)) email = found.email;
-      }
-      if (!email) {
-        // Store the lead but parked — no owner email to send to.
-        await prisma.outreachProspect.create({ data: {
-          tenantId, companyName: b.name, cleanCompanyName: sanitizeCompanyName(b.name) || null,
-          website: b.website ?? "", websiteDomain: domain, location: b.city ?? query, country: "GB",
-          vertical: niche, source: "scrape", status: "review", qualifyReason: "No owner email found",
-          reviewCount: b.reviewCount ?? null, reviewRating: b.rating ?? null,
-        } }).catch(() => {});
-        return "noEmail" as const;
-      }
-
-      const created = await prisma.outreachProspect.create({ data: {
-        tenantId, firstName: null, companyName: b.name, cleanCompanyName: sanitizeCompanyName(b.name) || null,
-        website: b.website ?? "", websiteDomain: domain, contactEmail: email, location: b.city ?? query, country: "GB",
-        vertical: niche, source: "scrape", status: "pending",
-        reviewCount: b.reviewCount ?? null, reviewRating: b.rating ?? null,
-      } }).catch(() => null);
-      if (!created) return "errored" as const;
-
-      const res = await processProspect({
-        prospectId: created.id, tenantId,
-        knownReviewCount: b.reviewCount ?? null, knownReviewRating: b.rating ?? null,
-      });
-      if (res.status === "generated") return "generated" as const;
-      if (res.status === "review") return "review" as const;
-      if (res.status === "rejected") return "rejected" as const;
-      return "errored" as const;
-    });
-
-    for (const s of settled) {
-      if (s.status !== "fulfilled") { total.errored++; continue; }
-      const k = s.value;
-      if (k === "noWebsite") total.noWebsite++;
-      else if (k === "duplicate") total.duplicate++;
-      else if (k === "noEmail") { total.noEmail++; total.created++; }
-      else if (k === "errored") total.errored++;
-      else { total.created++; total[k]++; }
-    }
+    const settled = await mapPool(businesses, concurrency, (b) => ingestOne(b, tenantId, niche, seen));
+    for (const s of settled) { if (s.status !== "fulfilled") { total.errored++; continue; } tallyAdd(total, s.value); }
     console.log(`  running totals — created ${total.created}, generated(ready) ${total.generated}, review ${total.review}, rejected ${total.rejected}, no-email ${total.noEmail}, dupes ${total.duplicate}`);
   }
 
