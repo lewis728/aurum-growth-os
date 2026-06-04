@@ -43,6 +43,9 @@ export async function enrichProspect(opts: {
   websiteText: string;
   /** ISO-ish country for the Meta Ad Library buy-signal lookup (defaults to GB launch market). */
   country?:    string;
+  /** Authoritative review count/rating (e.g. from Google Maps) — overrides scraped values. */
+  knownReviewCount?:  number | null;
+  knownReviewRating?: number | null;
 }): Promise<EnrichmentSignals> {
   const text = opts.websiteText ?? "";
   const lower = text.toLowerCase();
@@ -57,6 +60,10 @@ export async function enrichProspect(opts: {
   let reviewRating: number | null = null;
   const rr = text.match(RATING_RE);
   if (rr) { const n = parseFloat(rr[1]); if (Number.isFinite(n) && n <= 5) reviewRating = n; }
+
+  // Authoritative review data (Google Maps) wins over anything scraped from the site.
+  if (typeof opts.knownReviewCount === "number") reviewCount = opts.knownReviewCount;
+  if (typeof opts.knownReviewRating === "number" && opts.knownReviewRating <= 5) reviewRating = opts.knownReviewRating;
 
   // Meta Ad Library — the buy-signal. Graceful: returns null if the token is unset
   // (we can't claim "not running ads" when we simply couldn't look).

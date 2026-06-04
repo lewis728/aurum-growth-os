@@ -26,6 +26,8 @@ export interface ProcessInput {
   tenantId:     string;
   variantIndex?: number;  // A/B rotation for email-1 subject
   callLink?:    string;
+  knownReviewCount?:  number | null;  // authoritative review data (e.g. Google Maps)
+  knownReviewRating?: number | null;
 }
 
 export interface ProcessResult {
@@ -68,7 +70,10 @@ export async function processProspect(input: ProcessInput): Promise<ProcessResul
     const cleanName = p.cleanCompanyName || sanitizeCompanyName(p.companyName) || p.companyName;
 
     // ── Enrichment (real signals before we judge) ───────────────────────────────
-    const signals = await enrichProspect({ companyName: cleanName, websiteText, country: p.country });
+    const signals = await enrichProspect({
+      companyName: cleanName, websiteText, country: p.country,
+      knownReviewCount: input.knownReviewCount, knownReviewRating: input.knownReviewRating,
+    });
     const enrichmentData = {
       isRunningAds: signals.isRunningAds, reviewCount: signals.reviewCount,
       reviewRating: signals.reviewRating, hasPhone: signals.hasPhone,
