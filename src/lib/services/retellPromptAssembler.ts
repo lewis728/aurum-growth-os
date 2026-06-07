@@ -179,7 +179,7 @@ export function assembleRetellPrompt(
       `SLA: Attempt to book within ${crm.slaMinutes ?? 60} minutes of the lead submitting their details.`,
       "When the prospect is ready:",
       `  1. Confirm interest: "That sounds like a great fit for what we offer at ${businessName}."`,
-      `  2. Offer availability: "We have availability this week and next — what works best for you?"`,
+      `  2. Offer availability: if specific times are listed here — {{available_slots}} — OFFER ONLY THOSE and book one of them (these are the only times we are free); if that is blank, say "We have availability this week and next — what works best for you?"`,
       "  3. Collect: full name, best contact number, preferred date and time.",
       `  4. Confirm: "Wonderful, I've got you booked in. You'll receive a confirmation shortly."`,
     ].join("\n");
@@ -338,8 +338,12 @@ export async function assembleVoicePromptFromBrief(opts: {
       `6. Handle objections using the specific responses provided, in the agent's own ` +
       `warm words.\n` +
       `7. Always drive toward booking a SPECIFIC date and time, and confirm it back ` +
-      `clearly. If an average client value is given, let it inform how persistent ` +
-      `(but never pushy) the agent is about securing a firm booking.\n` +
+      `clearly. CRITICAL: if the placeholder {{available_slots}} (written EXACTLY as ` +
+      `{{available_slots}} — the platform fills it with the contractor's real free ` +
+      `times) contains specific times, OFFER ONLY THOSE and book one of them; if it ` +
+      `is blank, offer this week or next and confirm a specific time. If an average ` +
+      `client value is given, let it inform how persistent (but never pushy) the ` +
+      `agent is about securing a firm booking.\n` +
       `8. Match this brand tone exactly: ${tone}.\n` +
       `9. NEVER say or claim anything listed under compliance.\n\n` +
       `Write in the second person ("You are ${repName}...", "You should..."). Make it ` +

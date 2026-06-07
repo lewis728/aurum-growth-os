@@ -333,3 +333,107 @@ export async function getCalendarConnectionStatus(
     expiresAt: connection.expiresAt,
   };
 }
+
+// ── Contractor availability (for availability-aware booking) ────────────────────
+
+export interface AvailableSlot {
+  start: Date;
+  label: string; // human, in the contractor's timezone, e.g. "Tuesday 10 Jun, 10:00"
+}
+
+/**
+ * Reads the contractor's connected Google Calendar and returns the next open
+ * business-hours slots (Mon–Fri, 09:00–17:00 in their timezone, 1-hour slots,
+ * minus anything already busy). Sophie offers ONLY these on the call so we never
+ * book a time the contractor isn't free for.
+ *
+ * NEVER THROWS — returns [] when there's no Google calendar connected, the token
+ * is expired, or anything errors, so the caller falls back to open-ended booking.
+ * Google only (Calendly manages its own availability).
+ */
+export async function getContractorAvailableSlots(
+  contractorId: string,
+  opts?: { days?: number; maxSlots?: number; slotMinutes?: number },
+): Promise<AvailableSlot[]> {
+  const days = opts?.days ?? 10;
+  const maxSlots = opts?.maxSlots ?? 8;
+  const slotMinutes = opts?.slotMinutes ?? 60;
+
+  try {
+    const conn = await prisma.calendarConnection.findUnique({
+      where: { contractorId },
+      select: { provider: true, encryptedToken: true, calendarId: true, expiresAt: true, timeZone: true },
+    });
+    if (!conn || conn.provider !== CalendarProvider.GOOGLE) return [];
+    if (conn.expiresAt && conn.expiresAt < new Date()) return [];
+
+    let token: string;
+    try {
+      token = decryptToken(conn.encryptedToken);
+    } catch {
+      return [];
+    }
+
+    const now = new Date();
+    const timeMin = new Date(now.getTime() + 60 * 60 * 1000); // at least 1h out
+    const timeMax = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const res = await fetch(`${GOOGLE_CALENDAR_API_BASE}/freeBusy`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        items: [{ id: conn.calendarId }],
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as {
+      calendars?: Record<string, { busy?: { start: string; end: string }[] }>;
+    };
+    const busy = (data.calendars?.[conn.calendarId]?.busy ?? []).map((b) => ({
+      start: new Date(b.start),
+      end: new Date(b.end),
+    }));
+
+    // Business-hours window evaluated in the contractor's own timezone (default UK).
+    const tz = conn.timeZone ?? "Europe/London";
+    const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short" });
+    const hourFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hour12: false });
+    const labelFmt = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const WEEKDAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+
+    const slots: AvailableSlot[] = [];
+    const cursor = new Date(timeMin);
+    cursor.setMinutes(0, 0, 0);
+    cursor.setHours(cursor.getHours() + 1); // start on the next full hour
+
+    for (let i = 0; i < days * 24 && slots.length < maxSlots; i++) {
+      const weekday = weekdayFmt.format(cursor);
+      const localHour = parseInt(hourFmt.format(cursor), 10);
+      if (WEEKDAYS.has(weekday) && localHour >= 9 && localHour <= 16 && cursor > now) {
+        const slotEnd = new Date(cursor.getTime() + slotMinutes * 60 * 1000);
+        const clash = busy.some((b) => cursor < b.end && slotEnd > b.start);
+        if (!clash) slots.push({ start: new Date(cursor), label: labelFmt.format(cursor) });
+      }
+      cursor.setHours(cursor.getHours() + 1);
+    }
+
+    return slots;
+  } catch (err) {
+    console.warn(
+      `[calendarService] availability read failed for contractor ${contractorId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return [];
+  }
+}

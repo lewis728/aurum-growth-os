@@ -15,6 +15,7 @@ import { resolveClientFromNumber } from "@/lib/services/phoneNumberService";
 import { buildClientContext } from "@/lib/agents/clientContext";
 import { callFrameForTier, type LeadTier } from "@/lib/services/leadEnrichmentService";
 import { getCityPersona, renderPersonaForCall } from "@/lib/intelligence/conversationalMatrix";
+import { getContractorAvailableSlots } from "@/lib/services/calendarService";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 // Retell dynamic variables must all be strings. Renders the brief's
@@ -166,6 +167,29 @@ export async function placeSpeedToLeadCall(opts: {
     const persona = await getCityPersona(blueprint.vertical, blueprint.targetLocation);
     const localModel = renderPersonaForCall(persona);
 
+    // Availability-aware booking: find the city's active contractor and offer ONLY
+    // the slots they're actually free for (from their connected calendar). Empty
+    // string → Sophie books open-endedly (no calendar connected / none free).
+    let availableSlots = "";
+    try {
+      const contractor = await prisma.contractor.findFirst({
+        where: {
+          tenantId,
+          status: "active",
+          vertical: blueprint.vertical,
+          city: { equals: blueprint.targetLocation, mode: "insensitive" },
+        },
+        orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      });
+      if (contractor) {
+        const slots = await getContractorAvailableSlots(contractor.id);
+        availableSlots = slots.map((s) => s.label).join("; ");
+      }
+    } catch (e) {
+      console.error("[speedToLead] availability lookup failed:", e instanceof Error ? e.message : e);
+    }
+
     const { callId } = await createPhoneCall({
       fromNumber,
       toNumber,
@@ -183,6 +207,7 @@ export async function placeSpeedToLeadCall(opts: {
         lead_tier:              frame.lead_tier,
         tier_frame:             frame.tier_frame,
         local_conversational_model: localModel,
+        available_slots:        availableSlots,
       },
     });
 
