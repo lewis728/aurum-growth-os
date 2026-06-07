@@ -15,6 +15,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { lockInCredits } from "@/lib/services/contractorBillingService";
+import { sendAgencyAlert } from "@/lib/services/alertService";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +133,83 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           });
           console.info(`[stripe-webhook] SpendFeeRecord marked paid for tenantId=${tenantId} period=${periodMonth}`);
         }
+        break;
+      }
+
+      // ── Contractor lock-in paid (£700) → save card + grant prepaid credits ──
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const contractorId = session.metadata?.contractorId;
+        if (!contractorId || session.metadata?.kind !== "lockin") break;
+
+        const contractor = await prisma.contractor.findUnique({ where: { id: contractorId } });
+        if (!contractor) {
+          console.warn(`[stripe-webhook] checkout.session.completed for unknown contractor ${contractorId}`);
+          break;
+        }
+
+        // Resolve the saved payment method off the PaymentIntent.
+        const piRef = session.payment_intent;
+        const piId = typeof piRef === "string" ? piRef : piRef?.id ?? null;
+        let paymentMethodId: string | null = null;
+        if (piId) {
+          try {
+            const pi = await stripe.paymentIntents.retrieve(piId);
+            paymentMethodId = typeof pi.payment_method === "string" ? pi.payment_method : pi.payment_method?.id ?? null;
+          } catch (e: unknown) {
+            console.warn(`[stripe-webhook] could not retrieve PI ${piId}:`, e instanceof Error ? e.message : e);
+          }
+        }
+
+        const credits = lockInCredits(contractor);
+        // Idempotent: grant the lock-in credits exactly once (guard on lockInPaidAt).
+        const res = await prisma.contractor.updateMany({
+          where: { id: contractorId, lockInPaidAt: null },
+          data: {
+            stripePaymentMethodId: paymentMethodId ?? contractor.stripePaymentMethodId,
+            stripeCustomerId:
+              typeof session.customer === "string" ? session.customer : contractor.stripeCustomerId,
+            prepaidCreditRemaining: credits,
+            lockInPaidAt: new Date(),
+            status: "active",
+          },
+        });
+        console.info(
+          res.count === 0
+            ? `[stripe-webhook] contractor ${contractorId} lock-in already processed — skipping`
+            : `[stripe-webhook] contractor ${contractorId} locked in: ${credits} prepaid credits, card saved`,
+        );
+        break;
+      }
+
+      // ── Async survey-charge failure (safety net for off-session declines) ──
+      case "payment_intent.payment_failed": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const appointmentId = pi.metadata?.appointmentId;
+        if (!appointmentId || pi.metadata?.kind !== "survey") break;
+
+        const charge = await prisma.surveyCharge.findUnique({
+          where: { appointmentId },
+          include: { contractor: true },
+        });
+        if (!charge) break;
+        // Already settled synchronously — don't double-write or double-alert.
+        if (charge.status === "failed" || charge.status === "paid" || charge.status === "credit_consumed") break;
+
+        const reason = pi.last_payment_error?.code ?? pi.last_payment_error?.message ?? "payment_failed";
+        await prisma.surveyCharge.update({
+          where: { appointmentId },
+          data: { status: "failed", failureReason: reason, stripePaymentIntentId: pi.id },
+        });
+        await sendAgencyAlert(charge.tenantId, {
+          agentName: "Aurum Billing",
+          clientName: charge.contractor.name,
+          actionType: "PAYMENT_FAILED",
+          issue: `Couldn't charge £${charge.amountGbp} for a booked site survey in ${charge.contractor.city} — ${reason}.`,
+          recommended: "Booking kept. Chase the contractor's card.",
+          blueprintId: charge.blueprintId,
+        });
+        console.info(`[stripe-webhook] survey charge for ${appointmentId} marked failed: ${reason}`);
         break;
       }
 

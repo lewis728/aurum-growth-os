@@ -5,14 +5,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/spend-fee",
-      "schedule": "0 8 1 * *"
-    },
-    {
-      "path": "/api/cron/monthly-report",
-      "schedule": "0 9 1 * *"
-    },
-    {
       "path": "/api/cron/performance-aggregation",
       "schedule": "0 3 * * 1"
     },
@@ -29,32 +21,12 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/client-whatsapp",
-      "schedule": "0 9 * * 1"
-    },
-    {
-      "path": "/api/cron/vector-knowledge",
-      "schedule": "0 2 * * *"
-    },
-    {
       "path": "/api/cron/vertical-training",
       "schedule": "0 0 * * 0"
     },
     {
-      "path": "/api/cron/competitor-intel",
-      "schedule": "0 5 * * 5"
-    },
-    {
-      "path": "/api/cron/outreach-autopilot",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/cron/capacity-monitor",
       "schedule": "0 */2 * * *"
-    },
-    {
-      "path": "/api/cron/auction-arbitrage",
-      "schedule": "0 */6 * * *"
     }
   ]
 }

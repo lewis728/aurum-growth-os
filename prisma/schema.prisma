@@ -63,10 +63,15 @@ model CampaignBlueprint {
   agentActions     AgentAction[]
   agentInstructions AgentInstruction[]
   clientBrief      ClientBrief?
+  // Contractor link (billing pivot): the local roofing contractor this city
+  // campaign sells its booked site surveys to. Drives per-booking charging.
+  contractorId     String?
+  contractor       Contractor? @relation(fields: [contractorId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([pendingOrgLink])
+  @@index([contractorId])
 }
 
 // ── ClientBrief ──────────────────────────────────────────────────────
@@ -202,6 +207,7 @@ model Appointment {
   blueprint       CampaignBlueprint?  @relation(fields: [blueprintId], references: [id])
   lead            Lead               @relation(fields: [leadId], references: [id])
   reminders       ScheduledReminder[]
+  surveyCharge    SurveyCharge?
   @@index([blueprintId])
   @@index([tenantId])
   @@index([tenantId, scheduledAt])
@@ -370,6 +376,66 @@ model SpendFeeRecord {
   createdAt       DateTime  @default(now())
 
   @@unique([tenantId, periodMonth])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// ── Contractor (the local partner / buyer) ───────────────────────────
+// Billing pivot: Aurum captures roofing demand per city and SELLS booked
+// site-survey appointments to the local roofing contractor. The contractor is
+// a BUYER, not a logged-in tenant — Lewis onboards them.
+//   - £700 lock-in up front → prepaidCreditRemaining = 2 (first 2 surveys paid)
+//   - thereafter every booked survey auto-charges the saved card £350 off-session
+// stripeCustomerId/stripePaymentMethodId are Stripe references (not secrets),
+// stored plain — consistent with AgencySubscription.stripeCustomerId.
+model Contractor {
+  id                     String    @id @default(cuid())
+  tenantId               String
+  name                   String
+  city                   String
+  email                  String
+  phone                  String?
+  stripeCustomerId       String?   @unique
+  stripePaymentMethodId  String?              // saved card for off-session charges
+  pricePerSurveyGbp      Int       @default(350)
+  lockInFeeGbp           Int       @default(700)
+  prepaidCreditRemaining Int       @default(0) // surveys already paid for (set to 2 on lock-in)
+  lockInPaidAt           DateTime?             // when the £700 lock-in cleared
+  status                 String    @default("pending") // pending | active | paused
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  blueprints    CampaignBlueprint[]
+  surveyCharges SurveyCharge[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+// ── SurveyCharge (per-booking billing ledger) ────────────────────────
+// One row per booked survey. appointmentId @unique is the idempotency guard —
+// a Retell retry / webhook replay can never charge a booking twice (same guard
+// pattern as Appointment.leadId @unique and SpendFeeRecord @@unique).
+//   kind "credit" → consumed a prepaid lock-in survey (no Stripe call)
+//   kind "charge" → off-session £350 PaymentIntent against the saved card
+model SurveyCharge {
+  id                    String    @id @default(cuid())
+  appointmentId         String    @unique
+  contractorId          String
+  tenantId              String
+  blueprintId           String?              // denormalised reference for reporting
+  amountGbp             Int
+  kind                  String               // credit | charge
+  status                String    @default("pending") // pending | credit_consumed | paid | failed
+  stripePaymentIntentId String?
+  failureReason         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  contractor  Contractor  @relation(fields: [contractorId], references: [id])
+
+  @@index([contractorId])
   @@index([tenantId])
   @@index([status])
 }
