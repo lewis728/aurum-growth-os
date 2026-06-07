@@ -54,9 +54,15 @@ async function reKeyPendingTenant(userId: string, orgId: string): Promise<void> 
     moveUnique("MetaConnection",
       (t) => prisma.metaConnection.findUnique({ where: { tenantId: t }, select: { id: true } }),
       () => prisma.metaConnection.update({ where: { tenantId: pendingKey }, data: { tenantId: orgId } })),
-    moveUnique("CalendarConnection",
-      (t) => prisma.calendarConnection.findUnique({ where: { tenantId: t }, select: { id: true } }),
-      () => prisma.calendarConnection.update({ where: { tenantId: pendingKey }, data: { tenantId: orgId } })),
+    // CalendarConnection.tenantId is no longer unique (one tenant owns many
+    // contractor calendars), so move ALL of the tenant's rows with updateMany.
+    (async () => {
+      try {
+        await prisma.calendarConnection.updateMany({ where: { tenantId: pendingKey }, data: { tenantId: orgId } });
+      } catch (e) {
+        console.error("[link-org] CalendarConnection move failed:", e instanceof Error ? e.message : e);
+      }
+    })(),
     moveUnique("AgencySubscription",
       (t) => prisma.agencySubscription.findUnique({ where: { tenantId: t }, select: { id: true } }),
       () => prisma.agencySubscription.update({ where: { tenantId: pendingKey }, data: { tenantId: orgId } })),

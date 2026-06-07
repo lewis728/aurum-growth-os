@@ -43,8 +43,8 @@ export async function readCapacity(blueprintId: string, tenantId: string): Promi
 
   // Try Google freebusy.
   try {
-    const conn = await prisma.calendarConnection.findUnique({
-      where: { tenantId },
+    const conn = await prisma.calendarConnection.findFirst({
+      where: { tenantId, contractorId: null },
       select: { provider: true, encryptedToken: true, calendarId: true, expiresAt: true },
     });
     if (conn && conn.provider === "GOOGLE" && (!conn.expiresAt || conn.expiresAt > now)) {

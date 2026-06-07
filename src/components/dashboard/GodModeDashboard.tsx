@@ -15,6 +15,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
+import { TerritoriesPanel } from "@/components/dashboard/TerritoriesPanel";
 
 const fetcher = (url: string) =>
   fetch(url).then((r) => {
@@ -220,6 +221,8 @@ export function GodModeDashboard() {
             ))}
           </div>
         </section>
+
+        <TerritoriesPanel />
       </div>
     </div>
   );

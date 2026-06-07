@@ -88,13 +88,17 @@ async function createGoogleCalendarEvent(
  * Routes to the correct provider implementation.
  * Never throws — logs warnings and returns gracefully on any error.
  */
-export async function createCalendarEvent(appointmentId: string): Promise<void> {
-  // ── 1. Fetch appointment + lead ───────────────────────────────────────────
+export async function createCalendarEvent(
+  appointmentId: string,
+  contractorIdOverride?: string | null,
+): Promise<void> {
+  // ── 1. Fetch appointment + lead + the booking's contractor link ───────────
   let appointment: {
     id: string;
     tenantId: string;
     scheduledAt: Date;
     notes: string | null;
+    blueprint: { contractorId: string | null } | null;
     lead: {
       firstName: string;
       lastName: string;
@@ -107,6 +111,7 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
     appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
+        blueprint: { select: { contractorId: true } },
         lead: {
           select: {
             firstName: true,
@@ -134,26 +139,40 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
 
   const { tenantId, scheduledAt, notes, lead } = appointment;
 
-  // ── 2. Fetch CalendarConnection ───────────────────────────────────────────
+  // ── 2. Resolve the target calendar: the booking's CONTRACTOR first (explicit
+  //       override → blueprint's contractor), else the tenant-level (Lewis's own)
+  //       connection as a fallback so a booking is never lost.
+  const targetContractorId = contractorIdOverride ?? appointment.blueprint?.contractorId ?? null;
+
+  const connSelect = {
+    provider: true,
+    encryptedToken: true,
+    calendarId: true,
+    expiresAt: true,
+    timeZone: true,
+  } as const;
+
   let connection: {
     provider: CalendarProvider;
     encryptedToken: string;
     calendarId: string;
     expiresAt: Date | null;
     timeZone: string | null;
-  } | null;
+  } | null = null;
 
   try {
-    connection = await prisma.calendarConnection.findUnique({
-      where: { tenantId },
-      select: {
-        provider: true,
-        encryptedToken: true,
-        calendarId: true,
-        expiresAt: true,
-        timeZone: true,
-      },
-    });
+    if (targetContractorId) {
+      connection = await prisma.calendarConnection.findUnique({
+        where: { contractorId: targetContractorId },
+        select: connSelect,
+      });
+    }
+    if (!connection) {
+      connection = await prisma.calendarConnection.findFirst({
+        where: { tenantId, contractorId: null },
+        select: connSelect,
+      });
+    }
   } catch (err) {
     console.warn(
       `[calendarService] DB error fetching CalendarConnection for tenant ${tenantId}:`,
@@ -164,7 +183,7 @@ export async function createCalendarEvent(appointmentId: string): Promise<void> 
 
   if (!connection) {
     console.warn(
-      `[calendarService] No calendar connected for tenant ${tenantId} — ` +
+      `[calendarService] No calendar connected (contractor ${targetContractorId ?? "none"}, tenant ${tenantId}) — ` +
       `appointment ${appointmentId} saved to DB but not synced to calendar`
     );
     return;
@@ -288,8 +307,8 @@ export type CalendarConnectionStatus =
 export async function getCalendarConnectionStatus(
   tenantId: string
 ): Promise<CalendarConnectionStatus> {
-  const connection = await prisma.calendarConnection.findUnique({
-    where: { tenantId },
+  const connection = await prisma.calendarConnection.findFirst({
+    where: { tenantId, contractorId: null },
     select: {
       provider: true,
       calendarId: true,

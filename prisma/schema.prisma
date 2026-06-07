@@ -270,7 +270,8 @@ enum CalendarProvider {
 
 model CalendarConnection {
   id             String           @id @default(cuid())
-  tenantId       String           @unique
+  tenantId       String           // NOT unique: one tenant (Lewis) owns many contractor calendars
+  contractorId   String?          @unique  // the contractor whose calendar this is; null = tenant-level (Lewis's own)
   provider       CalendarProvider
   encryptedToken String           @db.Text  // AES-256-CBC encrypted access token
   refreshToken   String?          @db.Text  // Encrypted refresh token (Google only)
@@ -279,6 +280,8 @@ model CalendarConnection {
   connectedAt    DateTime         @default(now())
   expiresAt      DateTime?        // Null for Calendly (long-lived tokens)
   updatedAt      DateTime         @updatedAt
+
+  contractor     Contractor?      @relation(fields: [contractorId], references: [id])
 
   @@index([tenantId])
 }
@@ -391,10 +394,13 @@ model SpendFeeRecord {
 model Contractor {
   id                     String    @id @default(cuid())
   tenantId               String
-  name                   String
-  city                   String
+  name                   String                // contact / owner name
+  companyName            String?               // trading name (optional)
+  city                   String                // their exclusive territory
+  vertical               String    @default("roofing") // roofing | home_improvement
   email                  String
   phone                  String?
+  priority               Int       @default(0) // routing order within a city+vertical (0 = primary, higher = backup)
   stripeCustomerId       String?   @unique
   stripePaymentMethodId  String?              // saved card for off-session charges
   pricePerSurveyGbp      Int       @default(350)
@@ -405,11 +411,13 @@ model Contractor {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  blueprints    CampaignBlueprint[]
-  surveyCharges SurveyCharge[]
+  blueprints         CampaignBlueprint[]
+  surveyCharges      SurveyCharge[]
+  calendarConnection CalendarConnection?
 
   @@index([tenantId])
   @@index([status])
+  @@index([city, vertical, status]) // routing: active contractors for a territory
 }
 
 // ── SurveyCharge (per-booking billing ledger) ────────────────────────

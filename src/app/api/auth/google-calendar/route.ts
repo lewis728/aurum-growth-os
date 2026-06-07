@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 const GOOGLE_OAUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -48,25 +49,42 @@ function getClerkSecretKey(): string {
  * Format: base64url-encoded JSON { tenantId, issuedAt, signature }
  * Signature: HMAC-SHA256(tenantId + ":" + issuedAt, CLERK_SECRET_KEY)
  */
-function buildGoogleStateToken(tenantId: string): string {
+function buildGoogleStateToken(tenantId: string, contractorId?: string | null): string {
   const key = getClerkSecretKey();
   const issuedAt = Date.now().toString();
-  const message = `${tenantId}:${issuedAt}`;
+  const cid = contractorId ?? "";
+  const message = `${tenantId}:${cid}:${issuedAt}`;
   const signature = crypto
     .createHmac("sha256", key)
     .update(message)
     .digest("hex");
-  const payload = JSON.stringify({ tenantId, issuedAt, signature });
+  const payload = JSON.stringify({ tenantId, contractorId: cid || undefined, issuedAt, signature });
   return Buffer.from(payload).toString("base64url");
 }
 
 // ── Route Handler ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // ── 1. Authenticate ───────────────────────────────────────────────────────
-const { userId, orgId } = await auth();
-  if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const tenantId = orgId ?? `pending:${userId}`;
+  // ── 1. Resolve who's connecting ───────────────────────────────────────────
+  // Public onboarding path: ?contractorId=<id> connects THAT contractor's calendar
+  // (no Clerk session — they're not a platform user). Otherwise require auth and
+  // connect the tenant-level (Lewis's own) calendar.
+  const contractorId = req.nextUrl.searchParams.get("contractorId");
+  let tenantId: string;
+  let cid: string | null = null;
+  if (contractorId) {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: { id: true, tenantId: true },
+    });
+    if (!contractor) return NextResponse.json({ error: "Contractor not found" }, { status: 404 });
+    tenantId = contractor.tenantId;
+    cid = contractor.id;
+  } else {
+    const { userId, orgId } = await auth();
+    if (!userId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    tenantId = orgId ?? `pending:${userId}`;
+  }
 
   // ── 2. Build redirect URI ─────────────────────────────────────────────────
   const origin = req.nextUrl.origin;
@@ -75,7 +93,7 @@ const { userId, orgId } = await auth();
   // ── 3. Build CSRF state token ─────────────────────────────────────────────
   let state: string;
   try {
-    state = buildGoogleStateToken(tenantId);
+    state = buildGoogleStateToken(tenantId, cid);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[google-calendar/oauth] Failed to build state token:", msg);

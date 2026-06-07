@@ -10,15 +10,18 @@
  *      "payment", setup_future_usage=off_session) which both SAVES the contractor's
  *      card and pre-pays the first 2 surveys (700 / 350). The webhook grants the
  *      prepaid credits — see /api/webhooks/stripe.
- *   2. PER BOOKING: when the Retell bot books a survey (scheduler.ts), we charge
- *      the contractor £350 — consuming a prepaid credit first, else an off-session
- *      PaymentIntent against the saved card.
+ *   2. PER BOOKING: when the Retell bot books a survey (scheduler.ts), we ROUTE it
+ *      to the active contractor for that city + vertical and charge £350 — consuming
+ *      a prepaid credit first, else an off-session PaymentIntent. On success the
+ *      booking is pushed into THAT contractor's calendar. If the primary's card
+ *      fails we try the next contractor (backup routing); if all fail we keep the
+ *      booking, drop it on Lewis's calendar, and alert.
  *
  * Golden rules (mirroring stripeService.ts):
- *   - chargeForBooking() NEVER THROWS — it runs inside the post-call path.
+ *   - routeAndChargeBooking() NEVER THROWS — it runs inside the post-call path.
  *   - SurveyCharge.appointmentId @unique guarantees a booking is charged at most
  *     once (idempotent against Retell retries / webhook replays).
- *   - A failed charge NEVER reverses the booking — we keep it and alert Lewis.
+ *   - A failed charge NEVER reverses the booking.
  *   - stripeCustomerId / stripePaymentMethodId are Stripe references, not secrets.
  *   - Zero `any`, zero `@ts-ignore`.
  */
@@ -26,6 +29,7 @@
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { sendAgencyAlert } from "@/lib/services/alertService";
+import { createCalendarEvent } from "@/lib/services/calendarService";
 import type { Contractor } from "@prisma/client";
 
 // ─── Stripe client (same version pin as stripeService.ts) ───────────────────────
@@ -130,21 +134,81 @@ export async function startContractorLockIn(
   return session.url;
 }
 
-// ─── chargeForBooking ───────────────────────────────────────────────────────────
+// ─── Per-booking routing + charging ─────────────────────────────────────────────
 
 export type ChargeOutcome = "credit_consumed" | "paid" | "failed" | "skipped";
 export interface ChargeResult {
   outcome: ChargeOutcome;
   reason?: string;
+  contractorId?: string;
+}
+
+interface SettleResult {
+  ok: boolean;
+  kind?: "credit" | "charge";
+  piId?: string;
+  reason?: string;
 }
 
 /**
- * Charge the contractor for one booked survey. Called from the scheduler right
- * after the appointment + calendar event are created. NEVER THROWS.
- *
- * Order: idempotency guard → prepaid credit → off-session card charge.
+ * Settle one booking against ONE specific contractor: prepaid credit first, else an
+ * off-session card charge. NEVER THROWS — returns ok:false on any failure so the
+ * caller can fall through to a backup contractor. Does NOT write the ledger row
+ * (the orchestrator commits it for the winner). Idempotency key is per
+ * (appointment, contractor) so retrying one contractor can't double-charge, while
+ * trying a different contractor is a distinct charge.
  */
-export async function chargeForBooking(appointmentId: string): Promise<ChargeResult> {
+async function attemptSettleForContractor(
+  appointmentId: string,
+  contractor: Contractor,
+  tenantId: string,
+): Promise<SettleResult> {
+  // 1. Prepaid credit first — atomic conditional decrement (race-safe).
+  try {
+    const dec = await prisma.contractor.updateMany({
+      where: { id: contractor.id, prepaidCreditRemaining: { gt: 0 } },
+      data: { prepaidCreditRemaining: { decrement: 1 } },
+    });
+    if (dec.count === 1) return { ok: true, kind: "credit" };
+  } catch (e) {
+    console.error("[contractorBilling] credit decrement failed:", e instanceof Error ? e.message : e);
+  }
+
+  // 2. Off-session card charge.
+  if (!contractor.stripeCustomerId || !contractor.stripePaymentMethodId) {
+    return { ok: false, reason: "no_saved_card" };
+  }
+  try {
+    const pi = await getStripe().paymentIntents.create(
+      {
+        amount: toPence(contractor.pricePerSurveyGbp),
+        currency: "gbp",
+        customer: contractor.stripeCustomerId,
+        payment_method: contractor.stripePaymentMethodId,
+        off_session: true,
+        confirm: true,
+        description: `Site survey booking — ${contractor.city}`,
+        metadata: { appointmentId, contractorId: contractor.id, tenantId, kind: "survey" },
+      },
+      { idempotencyKey: `survey:${appointmentId}:${contractor.id}` },
+    );
+    if (pi.status === "succeeded") return { ok: true, kind: "charge", piId: pi.id };
+    // Off-session can't complete an interactive step (e.g. requires_action / 3DS).
+    return { ok: false, reason: `payment_intent_status:${pi.status}`, piId: pi.id };
+  } catch (e: unknown) {
+    const reason =
+      e instanceof Stripe.errors.StripeError ? (e.code ?? e.message) : e instanceof Error ? e.message : String(e);
+    return { ok: false, reason };
+  }
+}
+
+/**
+ * Route a booked survey to the right contractor for its city + vertical and charge
+ * them, with backup routing. NEVER THROWS. Called from the scheduler right after the
+ * appointment is created (this also owns the calendar push, so the booking only
+ * lands in a contractor's diary once they've actually paid).
+ */
+export async function routeAndChargeBooking(appointmentId: string): Promise<ChargeResult> {
   try {
     const appt = await prisma.appointment.findUnique({
       where: { id: appointmentId },
@@ -152,13 +216,13 @@ export async function chargeForBooking(appointmentId: string): Promise<ChargeRes
         id: true,
         tenantId: true,
         blueprintId: true,
-        blueprint: { select: { contractorId: true } },
+        blueprint: { select: { targetLocation: true, vertical: true } },
         surveyCharge: { select: { status: true } },
       },
     });
 
     if (!appt) {
-      console.warn(`[contractorBilling] appointment ${appointmentId} not found — skipping charge`);
+      console.warn(`[contractorBilling] appointment ${appointmentId} not found — skipping`);
       return { outcome: "skipped", reason: "appointment_not_found" };
     }
 
@@ -167,32 +231,49 @@ export async function chargeForBooking(appointmentId: string): Promise<ChargeRes
       return { outcome: "skipped", reason: "already_settled" };
     }
 
-    const contractorId = appt.blueprint?.contractorId;
-    if (!contractorId) {
-      console.info(`[contractorBilling] appointment ${appointmentId} has no contractor linked — skipping charge`);
+    const city = appt.blueprint?.targetLocation?.trim() ?? null;
+    const vertical = appt.blueprint?.vertical ?? null;
+
+    // Active contractors for this territory, primary first (priority asc).
+    const contractors =
+      city && vertical
+        ? await prisma.contractor.findMany({
+            where: {
+              tenantId: appt.tenantId,
+              status: "active",
+              vertical,
+              city: { equals: city, mode: "insensitive" },
+            },
+            orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+          })
+        : [];
+
+    if (contractors.length === 0) {
+      // Unsold / unrouted territory — don't lose the booking: tenant calendar + alert.
+      await createCalendarEvent(appointmentId).catch(() => {});
+      await sendAgencyAlert(appt.tenantId, {
+        agentName: "Aurum Routing",
+        clientName: city ? `${city} (${vertical ?? "?"})` : "Unknown territory",
+        actionType: "NO_CONTRACTOR",
+        issue: `A survey booked but no active contractor covers ${city ?? "this city"} (${vertical ?? "?"}).`,
+        recommended: "Sell/assign this territory, then re-route the booking.",
+        blueprintId: appt.blueprintId,
+      });
       return { outcome: "skipped", reason: "no_contractor" };
     }
 
-    const contractor = await prisma.contractor.findUnique({ where: { id: contractorId } });
-    if (!contractor || contractor.status !== "active") {
-      console.info(`[contractorBilling] contractor ${contractorId} not active — skipping charge`);
-      return { outcome: "skipped", reason: "contractor_inactive" };
-    }
+    const primary = contractors[0]!;
 
-    const amountGbp = contractor.pricePerSurveyGbp;
-
-    // Claim the booking — create the ledger row (unique appointmentId). A P2002
-    // means a concurrent create; re-read. If NO row exists afterwards the create
-    // failed for a real reason — bail WITHOUT touching credits, so a transient DB
-    // error can never silently burn a prepaid credit.
+    // Claim the ledger row (unique appointmentId). A P2002 means a concurrent
+    // create; re-read and bail if already settled, else (re)attempt below.
     try {
       await prisma.surveyCharge.create({
         data: {
           appointmentId,
-          contractorId,
+          contractorId: primary.id,
           tenantId: appt.tenantId,
           blueprintId: appt.blueprintId,
-          amountGbp,
+          amountGbp: primary.pricePerSurveyGbp,
           kind: "charge",
           status: "pending",
         },
@@ -203,102 +284,79 @@ export async function chargeForBooking(appointmentId: string): Promise<ChargeRes
         select: { status: true },
       });
       if (!existing) {
-        console.error(`[contractorBilling] could not create ledger row for ${appointmentId} — skipping charge`);
+        console.error(`[contractorBilling] could not create ledger row for ${appointmentId}`);
         return { outcome: "failed", reason: "ledger_create_failed" };
       }
       if (existing.status === "paid" || existing.status === "credit_consumed") {
         return { outcome: "skipped", reason: "already_settled" };
       }
-      // A pending/failed row already exists — safe to (re)attempt settlement below.
     }
 
-    // 1. Prepaid credit first — atomic conditional decrement (race-safe).
-    const dec = await prisma.contractor.updateMany({
-      where: { id: contractorId, prepaidCreditRemaining: { gt: 0 } },
-      data: { prepaidCreditRemaining: { decrement: 1 } },
-    });
-    if (dec.count === 1) {
-      await prisma.surveyCharge.update({
-        where: { appointmentId },
-        data: { kind: "credit", status: "credit_consumed", failureReason: null },
-      });
-      console.info(`[contractorBilling] survey ${appointmentId} covered by prepaid credit for contractor ${contractorId}`);
-      return { outcome: "credit_consumed" };
-    }
-
-    // 2. Off-session card charge.
-    if (!contractor.stripeCustomerId || !contractor.stripePaymentMethodId) {
-      return await markFailed(appointmentId, "no_saved_card", contractor, appt.blueprintId, amountGbp);
-    }
-
-    try {
-      const pi = await getStripe().paymentIntents.create(
-        {
-          amount: toPence(amountGbp),
-          currency: "gbp",
-          customer: contractor.stripeCustomerId,
-          payment_method: contractor.stripePaymentMethodId,
-          off_session: true,
-          confirm: true,
-          description: `Site survey booking — ${contractor.city}`,
-          metadata: { appointmentId, contractorId, tenantId: appt.tenantId, kind: "survey" },
-        },
-        { idempotencyKey: `survey:${appointmentId}` },
-      );
-
-      if (pi.status === "succeeded") {
+    // Try each contractor in priority order until one settles.
+    const failures: string[] = [];
+    for (let i = 0; i < contractors.length; i++) {
+      const c = contractors[i]!;
+      const res = await attemptSettleForContractor(appointmentId, c, appt.tenantId);
+      if (res.ok) {
         await prisma.surveyCharge.update({
           where: { appointmentId },
-          data: { status: "paid", stripePaymentIntentId: pi.id, failureReason: null },
+          data: {
+            contractorId: c.id,
+            amountGbp: c.pricePerSurveyGbp,
+            kind: res.kind === "credit" ? "credit" : "charge",
+            status: res.kind === "credit" ? "credit_consumed" : "paid",
+            stripePaymentIntentId: res.piId ?? null,
+            failureReason: null,
+          },
         });
-        console.info(`[contractorBilling] charged £${amountGbp} for survey ${appointmentId} (PI ${pi.id})`);
-        return { outcome: "paid" };
+        // The booking lands in the WINNING contractor's own calendar.
+        await createCalendarEvent(appointmentId, c.id).catch((e: unknown) =>
+          console.error("[contractorBilling] calendar push failed:", e instanceof Error ? e.message : e),
+        );
+        const label = res.kind === "credit" ? "prepaid credit" : `£${c.pricePerSurveyGbp} charge`;
+        console.info(`[contractorBilling] survey ${appointmentId} → contractor ${c.id} (${label})`);
+        if (i > 0) {
+          await sendAgencyAlert(appt.tenantId, {
+            agentName: "Aurum Routing",
+            clientName: c.name,
+            actionType: "BACKUP_ROUTED",
+            issue: `Primary contractor's charge failed in ${c.city}; routed to backup ${c.name}.`,
+            recommended: "Check the primary contractor's card.",
+            blueprintId: appt.blueprintId,
+          });
+        }
+        return { outcome: res.kind === "credit" ? "credit_consumed" : "paid", contractorId: c.id };
       }
-
-      // Off-session can't complete an interactive step (e.g. requires_action / 3DS).
-      return await markFailed(appointmentId, `payment_intent_status:${pi.status}`, contractor, appt.blueprintId, amountGbp, pi.id);
-    } catch (e: unknown) {
-      const reason =
-        e instanceof Stripe.errors.StripeError ? (e.code ?? e.message) : e instanceof Error ? e.message : String(e);
-      return await markFailed(appointmentId, reason, contractor, appt.blueprintId, amountGbp);
+      failures.push(`${c.name}: ${res.reason ?? "unknown"}`);
     }
+
+    // All contractors failed — keep the booking, drop it on Lewis's calendar, alert.
+    await prisma.surveyCharge
+      .update({
+        where: { appointmentId },
+        data: { status: "failed", contractorId: primary.id, failureReason: failures.join(" | ").slice(0, 480) },
+      })
+      .catch(() => {});
+    await createCalendarEvent(appointmentId).catch(() => {});
+    await sendAgencyAlert(appt.tenantId, {
+      agentName: "Aurum Billing",
+      clientName: primary.city,
+      actionType: "PAYMENT_FAILED",
+      issue: `All ${contractors.length} contractor(s) in ${primary.city} failed to charge for a booked survey: ${failures.join(" | ")}.`,
+      tried: "Off-session charge against each active contractor in priority order.",
+      recommended: "Booking held 24h. Fix a card or assign another contractor.",
+      blueprintId: appt.blueprintId,
+    });
+    return { outcome: "failed", reason: "all_contractors_failed" };
   } catch (err: unknown) {
     // Absolute backstop — must never throw into the scheduler.
-    console.error("[contractorBilling] chargeForBooking error:", err instanceof Error ? err.message : err);
+    console.error("[contractorBilling] routeAndChargeBooking error:", err instanceof Error ? err.message : err);
     return { outcome: "failed", reason: "unexpected_error" };
   }
 }
 
 /**
- * Marks the SurveyCharge failed and alerts Lewis. The booking is NEVER reversed —
- * we don't un-book a homeowner because the contractor's card failed. NEVER THROWS.
+ * Back-compat alias. The scheduler calls routeAndChargeBooking directly; older
+ * call sites that imported chargeForBooking keep working.
  */
-async function markFailed(
-  appointmentId: string,
-  reason: string,
-  contractor: Contractor,
-  blueprintId: string | null,
-  amountGbp: number,
-  stripePaymentIntentId?: string,
-): Promise<ChargeResult> {
-  try {
-    await prisma.surveyCharge.update({
-      where: { appointmentId },
-      data: { status: "failed", failureReason: reason, stripePaymentIntentId: stripePaymentIntentId ?? null },
-    });
-  } catch (e) {
-    console.error("[contractorBilling] failed to mark SurveyCharge failed:", e instanceof Error ? e.message : e);
-  }
-
-  await sendAgencyAlert(contractor.tenantId, {
-    agentName: "Aurum Billing",
-    clientName: contractor.name,
-    actionType: "PAYMENT_FAILED",
-    issue: `Couldn't charge £${amountGbp} for a booked site survey in ${contractor.city} — ${reason}.`,
-    tried: "Off-session charge against the saved card / prepaid credit.",
-    recommended: "Booking kept. Chase the contractor's card or re-take the £" + `${contractor.lockInFeeGbp} lock-in.`,
-    blueprintId,
-  });
-
-  return { outcome: "failed", reason };
-}
+export const chargeForBooking = routeAndChargeBooking;

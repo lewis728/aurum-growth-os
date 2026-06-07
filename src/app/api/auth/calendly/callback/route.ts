@@ -318,23 +318,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    await prisma.calendarConnection.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        provider: CalendarProvider.CALENDLY,
-        encryptedToken: encryptedAccessToken,
-        calendarId: userUri,
-        expiresAt,
-      },
-      update: {
-        provider: CalendarProvider.CALENDLY,
-        encryptedToken: encryptedAccessToken,
-        calendarId: userUri,
-        expiresAt,
-        updatedAt: new Date(),
-      },
+    // tenantId is no longer unique (it owns many contractor calendars), so upsert
+    // the tenant-level (contractorId = null) Calendly connection by hand.
+    const existing = await prisma.calendarConnection.findFirst({
+      where: { tenantId, contractorId: null },
+      select: { id: true },
     });
+    if (existing) {
+      await prisma.calendarConnection.update({
+        where: { id: existing.id },
+        data: {
+          provider: CalendarProvider.CALENDLY,
+          encryptedToken: encryptedAccessToken,
+          calendarId: userUri,
+          expiresAt,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.calendarConnection.create({
+        data: {
+          tenantId,
+          provider: CalendarProvider.CALENDLY,
+          encryptedToken: encryptedAccessToken,
+          calendarId: userUri,
+          expiresAt,
+        },
+      });
+    }
   } catch (err) {
     return redirectError(
       `Failed to save Calendly connection: ${err instanceof Error ? err.message : String(err)}`

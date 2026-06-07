@@ -60,11 +60,12 @@ function getClerkSecretKey(): string {
 
 interface StatePayload {
   tenantId: string;
+  contractorId?: string;
   issuedAt: string;
   signature: string;
 }
 
-function verifyStateToken(state: string): string {
+function verifyStateToken(state: string): { tenantId: string; contractorId: string | null } {
   const key = getClerkSecretKey();
 
   let payload: StatePayload;
@@ -75,12 +76,13 @@ function verifyStateToken(state: string): string {
     throw new Error("State token is not valid base64url JSON");
   }
 
-  const { tenantId, issuedAt, signature } = payload;
+  const { tenantId, contractorId, issuedAt, signature } = payload;
   if (!tenantId || !issuedAt || !signature) {
     throw new Error("State token missing required fields");
   }
 
-  const message = `${tenantId}:${issuedAt}`;
+  const cid = contractorId ?? "";
+  const message = `${tenantId}:${cid}:${issuedAt}`;
   const expectedSig = crypto
     .createHmac("sha256", key)
     .update(message)
@@ -100,7 +102,7 @@ function verifyStateToken(state: string): string {
     throw new Error("State token has expired (max age 10 minutes)");
   }
 
-  return tenantId;
+  return { tenantId, contractorId: contractorId ?? null };
 }
 
 // ── Google Token Exchange ─────────────────────────────────────────────────────
@@ -219,8 +221,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // ── 2. Validate CSRF state ────────────────────────────────────────────────
   let tenantId: string;
+  let contractorId: string | null;
   try {
-    tenantId = verifyStateToken(state);
+    const verified = verifyStateToken(state);
+    tenantId = verified.tenantId;
+    contractorId = verified.contractorId;
   } catch (err) {
     return redirectError(
       `State validation failed: ${err instanceof Error ? err.message : String(err)}`
@@ -263,32 +268,76 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    await prisma.calendarConnection.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        provider: CalendarProvider.GOOGLE,
-        encryptedToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        calendarId,
-        expiresAt,
-      },
-      update: {
-        provider: CalendarProvider.GOOGLE,
-        encryptedToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        calendarId,
-        expiresAt,
-        updatedAt: new Date(),
-      },
-    });
+    if (contractorId) {
+      // Contractor's own calendar (onboarding) — keyed by the unique contractorId.
+      await prisma.calendarConnection.upsert({
+        where: { contractorId },
+        create: {
+          tenantId,
+          contractorId,
+          provider: CalendarProvider.GOOGLE,
+          encryptedToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
+          calendarId,
+          expiresAt,
+        },
+        update: {
+          tenantId,
+          provider: CalendarProvider.GOOGLE,
+          encryptedToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
+          calendarId,
+          expiresAt,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // Tenant-level (Lewis's own) calendar. tenantId is no longer unique, so
+      // upsert the contractorId = null row by hand.
+      const existing = await prisma.calendarConnection.findFirst({
+        where: { tenantId, contractorId: null },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.calendarConnection.update({
+          where: { id: existing.id },
+          data: {
+            provider: CalendarProvider.GOOGLE,
+            encryptedToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
+            calendarId,
+            expiresAt,
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.calendarConnection.create({
+          data: {
+            tenantId,
+            provider: CalendarProvider.GOOGLE,
+            encryptedToken: encryptedAccessToken,
+            refreshToken: encryptedRefreshToken,
+            calendarId,
+            expiresAt,
+          },
+        });
+      }
+    }
   } catch (err) {
     return redirectError(
       `Failed to save calendar connection: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
-  // ── 6. Redirect to dashboard with success ─────────────────────────────────
+  // ── 6. Redirect with success ──────────────────────────────────────────────
+  // Contractors return to the onboarding flow's confirmation step; the tenant
+  // (Lewis) returns to the dashboard.
+  if (contractorId) {
+    const onboardUrl = new URL(`${origin}/onboard/contractor`);
+    onboardUrl.searchParams.set("connected", "1");
+    onboardUrl.searchParams.set("contractorId", contractorId);
+    return NextResponse.redirect(onboardUrl.toString());
+  }
   const successUrl = new URL(dashboardUrl);
   successUrl.searchParams.set("calendar_connected", "google");
   return NextResponse.redirect(successUrl.toString());

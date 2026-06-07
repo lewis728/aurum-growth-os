@@ -29,8 +29,7 @@ import { queueAppointmentReminders, sendDirectSMS } from "@/lib/services/twilioS
 import { resolveTemplate, renderTemplate, parseSmsTemplates } from "@/lib/services/smsTemplates";
 import { extractObjections } from "@/lib/services/objectionService";
 import { recordPattern } from "@/lib/intelligence/conversationalMatrix";
-import { createCalendarEvent } from "@/lib/services/calendarService";
-import { chargeForBooking } from "@/lib/services/contractorBillingService";
+import { routeAndChargeBooking } from "@/lib/services/contractorBillingService";
 import type { LeadStatus } from "@/types/lead";
 
 // ── Retell post-call payload (only what we consume) ─────────────────────────
@@ -173,16 +172,15 @@ export async function handleCallOutcome(
       ]);
 
       // Each side effect isolated — one failing never blocks the others.
-      await createCalendarEvent(appointment.id).catch((e: unknown) =>
-        console.error("[scheduler] calendar event failed:", e instanceof Error ? e.message : e),
-      );
       await queueAppointmentReminders(appointment.id, lead.id).catch((e: unknown) =>
         console.error("[scheduler] reminder queue failed:", e instanceof Error ? e.message : e),
       );
-      // Billing pivot: charge the contractor £350 for this booked survey
-      // (prepaid credit first, else off-session card). NEVER reverses the booking.
-      await chargeForBooking(appointment.id).catch((e: unknown) =>
-        console.error("[scheduler] survey charge failed:", e instanceof Error ? e.message : e),
+      // Billing pivot: route the booking to the city's contractor, charge £350
+      // (prepaid credit first, else off-session card; backup contractor on failure),
+      // and on success push it into THAT contractor's own calendar. The router owns
+      // the calendar push so a booking only lands in a diary once it's paid for.
+      await routeAndChargeBooking(appointment.id).catch((e: unknown) =>
+        console.error("[scheduler] route+charge failed:", e instanceof Error ? e.message : e),
       );
 
       const when = new Date(analysis.appointmentSlotTime).toLocaleString("en-GB", {
