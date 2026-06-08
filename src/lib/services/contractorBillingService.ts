@@ -340,6 +340,16 @@ export async function routeAndChargeBooking(appointmentId: string): Promise<Char
     );
     await notifyBooking(contractor, appt);
 
+    // Proactive top-up: if that booking used their last credit (wallet hit £0),
+    // recharge £1,200 NOW for the next 3. Fire-and-forget — if the card fails it
+    // alerts, and the next round-robin assignment retries it (fresh idempotency window).
+    if (paid) {
+      const bal = await prisma.contractor
+        .findUnique({ where: { id: contractorId }, select: { prepaidCreditRemaining: true } })
+        .catch(() => null);
+      if (bal && bal.prepaidCreditRemaining <= 0) void ensureCreditOrRecharge(contractorId);
+    }
+
     if (!paid) {
       await sendAgencyAlert(appt.tenantId, {
         agentName: "Aurum Billing",

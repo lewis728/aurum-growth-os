@@ -1,18 +1,19 @@
 /**
  * src/app/lp/[blueprintId]/page.tsx
- * Public, client-specific lead-capture landing page (server component).
- * Fetches the blueprint + ClientBrief + agency branding and renders a polished,
- * conversion-focused page with copy drawn from the client's own brief — not
- * generic. The form posts to /api/lp/submit (server-side signed → leads webhook).
+ * Public, homeowner-facing B2C roofing landing page (server component) — the
+ * destination for the Meta ad. Mobile-first, single column, form near the top.
+ * Copy is blueprint-driven (business name, city, offer hook, brief) with strong
+ * roofing defaults. The form posts to /api/lp/submit (server-side signed → leads
+ * webhook), which triggers the 60-second Retell call.
  *
- * Public route — no Clerk auth. White-labelled: footer shows the client business
- * name only. Uses the agency's brand colour (dynamic per tenant — a legitimate
+ * Public route — no Clerk auth. Uses the brand colour per tenant (a legitimate
  * exception to the dashboard's CSS-variable rule).
  */
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getBranding } from "@/lib/services/brandingService";
 import { LeadForm } from "./LeadForm";
+import type { CSSProperties } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,14 @@ function hex(c: string | null | undefined, fallback: string): string {
 
 function splitList(raw: string | null | undefined): string[] {
   if (!raw) return [];
-  return raw
-    .split(/[;\n]+/)
-    .map(s => s.replace(/^[-•\d.\s]+/, "").trim())
-    .filter(Boolean);
+  return raw.split(/[;\n]+/).map(s => s.replace(/^[-•\d.\s]+/, "").trim()).filter(Boolean);
 }
+
+const STEPS: { title: string; body: string }[] = [
+  { title: "Tell us about your roof", body: "30 seconds — your name, number and what's going on up there." },
+  { title: "We call you within 60 seconds", body: "A quick chat to understand the job and find a time that suits you." },
+  { title: "A local roofer surveys it — free", body: "A vetted roofer comes out, takes a look and gives you a no-obligation quote." },
+];
 
 export default async function LandingPage(
   { params }: { params: { blueprintId: string } }
@@ -46,72 +50,114 @@ export default async function LandingPage(
     getBranding(blueprint.tenantId),
   ]);
 
-  const accent     = hex(branding?.primaryColour, "#C9A84C");
-  const niceVert   = blueprint.vertical.replace(/[._]/g, " ");
-  const headline   = blueprint.offerHook?.trim()
-    || `Book your free ${niceVert} consultation with ${blueprint.businessName}`;
-  const sub        = brief?.websiteSummary?.trim()
+  const accent   = hex(branding?.primaryColour, "#C9A84C");
+  const city     = blueprint.targetLocation?.trim() || "";
+  const headline = blueprint.offerHook?.trim()
+    || `Free, no-obligation roof survey${city ? ` in ${city}` : ""}`;
+  const sub = brief?.websiteSummary?.trim()
     || blueprint.businessDescription?.trim()
-    || `Speak to the team at ${blueprint.businessName} and get expert advice tailored to you — no obligation.`;
+    || "Leak, missing tiles, storm damage or thinking about a full re-roof? Tell us what's going on and a vetted local roofer will come and survey it — free, with absolutely no obligation.";
 
-  let bullets = splitList(brief?.keyUSPs).slice(0, 3);
+  let bullets = splitList(brief?.keyUSPs).slice(0, 4);
   if (bullets.length === 0) {
-    bullets = ["Free, no-obligation consultation", "Friendly expert advice", "Fast response — we call you back fast"];
+    bullets = [
+      "Free, no-obligation survey & quote",
+      "Local, vetted & insured roofers only",
+      "We call you back within 60 seconds",
+      "No pushy sales — just an honest look",
+    ];
   }
 
-  const questions = splitList(brief?.qualificationQuestions).slice(0, 3);
-  const ctaText   = "Get My Free Consultation";
+  const card: CSSProperties = {
+    background: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px",
+    padding: "24px", boxShadow: "0 10px 40px rgba(0,0,0,0.07)",
+  };
+  const pill: CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px",
+    borderRadius: "999px", background: "#fff", border: "1px solid #e5e7eb",
+    fontSize: "13px", fontWeight: 600, color: "#374151",
+  };
 
   return (
-    <main style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "Inter, system-ui, sans-serif", color: "#111827" }}>
-      {/* accent top bar */}
+    <main style={{ minHeight: "100vh", background: "#f4f6f8", fontFamily: "Inter, system-ui, sans-serif", color: "#111827" }}>
       <div style={{ height: "4px", background: accent }} />
 
-      <div style={{ maxWidth: "1040px", margin: "0 auto", padding: "48px 20px 64px" }}>
-        {(branding?.logoUrl || branding?.agencyName) && (
-          <div style={{ marginBottom: "36px" }}>
-            {branding?.logoUrl
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={branding.logoUrl} alt={blueprint.businessName} style={{ height: "34px", width: "auto" }} />
-              : <span style={{ fontSize: "18px", fontWeight: 700 }}>{blueprint.businessName}</span>}
+      <div style={{ maxWidth: "600px", margin: "0 auto", padding: "28px 18px 56px" }}>
+        {/* Brand */}
+        <div style={{ marginBottom: "22px", textAlign: "center" }}>
+          {branding?.logoUrl
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={branding.logoUrl} alt={blueprint.businessName} style={{ height: "34px", width: "auto" }} />
+            : <span style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "-0.01em" }}>{blueprint.businessName}</span>}
+        </div>
+
+        {/* Hero */}
+        {city && (
+          <div style={{ textAlign: "center", marginBottom: "12px" }}>
+            <span style={{ ...pill, background: `${accent}1a`, border: `1px solid ${accent}55`, color: "#1f2937" }}>
+              📍 {city} homeowners
+            </span>
           </div>
         )}
+        <h1 style={{ fontSize: "32px", lineHeight: 1.15, fontWeight: 800, letterSpacing: "-0.02em", textAlign: "center", margin: "0 0 14px" }}>
+          {headline}
+        </h1>
+        <p style={{ fontSize: "17px", lineHeight: 1.55, color: "#4b5563", textAlign: "center", margin: "0 0 20px" }}>
+          {sub}
+        </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "48px", alignItems: "start" }}>
-          {/* Left — pitch */}
-          <div>
-            <h1 style={{ fontSize: "40px", lineHeight: 1.12, fontWeight: 800, margin: "0 0 18px", letterSpacing: "-0.02em" }}>
-              {headline}
-            </h1>
-            <p style={{ fontSize: "18px", lineHeight: 1.55, color: "#4b5563", margin: "0 0 28px" }}>
-              {sub}
-            </p>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "14px" }}>
-              {bullets.map((b, i) => (
-                <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: "12px", fontSize: "16px", color: "#1f2937" }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }} aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  {b}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Right — form card */}
-          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "28px", boxShadow: "0 10px 40px rgba(0,0,0,0.06)" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px" }}>Request your free consultation</h2>
-            <p style={{ fontSize: "14px", color: "#6b7280", margin: "0 0 20px" }}>Fill this in and we&apos;ll call you straight back.</p>
-            <LeadForm blueprintId={blueprint.id} accent={accent} ctaText={ctaText} questions={questions} />
-          </div>
+        {/* Trust strip */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginBottom: "24px" }}>
+          <span style={pill}><span style={{ color: "#f59e0b" }}>★★★★★</span> Trusted locally</span>
+          <span style={pill}>✓ Vetted &amp; insured</span>
+          <span style={pill}>✓ No obligation</span>
         </div>
+
+        {/* Form — the conversion point */}
+        <div style={card}>
+          <h2 style={{ fontSize: "20px", fontWeight: 800, margin: "0 0 4px", textAlign: "center" }}>Book your free roof survey</h2>
+          <p style={{ fontSize: "14px", color: "#6b7280", margin: "0 0 18px", textAlign: "center" }}>
+            Fill this in and we&apos;ll call you straight back.
+          </p>
+          <LeadForm blueprintId={blueprint.id} accent={accent} ctaText="Get My Free Roof Survey" />
+        </div>
+
+        {/* How it works */}
+        <h3 style={{ fontSize: "16px", fontWeight: 700, textAlign: "center", margin: "40px 0 18px", color: "#374151" }}>
+          How it works
+        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {STEPS.map((s, i) => (
+            <div key={i} style={{ ...card, padding: "16px 18px", display: "flex", gap: "14px", alignItems: "flex-start", boxShadow: "none" }}>
+              <div style={{
+                flexShrink: 0, width: "30px", height: "30px", borderRadius: "999px",
+                background: accent, color: "#fff", fontWeight: 800, fontSize: "15px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>{i + 1}</div>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700, marginBottom: "2px" }}>{s.title}</div>
+                <div style={{ fontSize: "14px", color: "#6b7280", lineHeight: 1.5 }}>{s.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Why us */}
+        <ul style={{ listStyle: "none", padding: 0, margin: "28px 0 0", display: "flex", flexDirection: "column", gap: "12px" }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: "11px", fontSize: "15px", color: "#1f2937" }}>
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "1px" }} aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {b}
+            </li>
+          ))}
+        </ul>
       </div>
 
-      {/* Footer — client business name only, no platform branding */}
-      <footer style={{ borderTop: "1px solid #e5e7eb", padding: "24px 20px", textAlign: "center" }}>
+      <footer style={{ borderTop: "1px solid #e5e7eb", padding: "22px 20px", textAlign: "center" }}>
         <span style={{ fontSize: "13px", color: "#9ca3af" }}>
-          © {new Date().getFullYear()} {blueprint.businessName}
-          {blueprint.targetLocation ? ` · ${blueprint.targetLocation}` : ""}
+          © {new Date().getFullYear()} {blueprint.businessName}{city ? ` · ${city}` : ""}
         </span>
       </footer>
     </main>
