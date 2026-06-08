@@ -182,6 +182,7 @@ export function assembleRetellPrompt(
       `  2. Offer availability: if specific times are listed here — {{available_slots}} — OFFER ONLY THOSE and book one of them (these are the only times we are free); if that is blank, say "We have availability this week and next — what works best for you?"`,
       "  3. Collect: full name, best contact number, preferred date and time.",
       `  4. Confirm: "Wonderful, I've got you booked in. You'll receive a confirmation shortly."`,
+      `  5. Tell them who is visiting: "{{roofer_name}} from {{roofer_company}} will carry out your roof survey." (If {{roofer_name}} is blank, say a vetted local roofer from our network will be in touch to confirm.)`,
     ].join("\n");
 
     // OBJECTION HANDLING
@@ -341,7 +342,10 @@ export async function assembleVoicePromptFromBrief(opts: {
       `clearly. CRITICAL: if the placeholder {{available_slots}} (written EXACTLY as ` +
       `{{available_slots}} — the platform fills it with the contractor's real free ` +
       `times) contains specific times, OFFER ONLY THOSE and book one of them; if it ` +
-      `is blank, offer this week or next and confirm a specific time. If an average ` +
+      `is blank, offer this week or next and confirm a specific time. Once it's booked, ` +
+      `tell them who will carry out the survey: "{{roofer_name}} from {{roofer_company}} ` +
+      `will visit" (write {{roofer_name}} and {{roofer_company}} EXACTLY — the platform ` +
+      `fills them; if blank, say a vetted local roofer will be in touch). If an average ` +
       `client value is given, let it inform how persistent (but never pushy) the ` +
       `agent is about securing a firm booking.\n` +
       `8. Match this brand tone exactly: ${tone}.\n` +

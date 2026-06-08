@@ -169,27 +169,27 @@ export default function ContractorOnboardingPage(): React.ReactElement {
         <div style={card}>
           <ShieldCheck size={28} color={gold} style={{ marginBottom: 12 }} />
           <h1 style={{ fontSize: 22, marginBottom: 12 }}>
-            Exclusive rights to {form.city || "your city"}
+            Booked roof surveys in {form.city || "your city"}
           </h1>
           <p style={{ color: "var(--text-2,#a1a1aa)", fontSize: 15, lineHeight: 1.6, marginBottom: 16 }}>
-            You&apos;re securing exclusive rights to <strong style={{ color: "var(--text-1,#fff)" }}>{form.city || "your city"}</strong> for {verticalLabel} surveys.
+            You&apos;ll join our panel of {verticalLabel} roofers for <strong style={{ color: "var(--text-1,#fff)" }}>{form.city || "your city"}</strong> — we send you confirmed, booked surveys straight into your calendar.
           </p>
           <div style={{ background: "var(--surface-2,#111)", borderRadius: 8, padding: 16, marginBottom: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ color: "var(--text-2,#a1a1aa)" }}>Today (lock-in, first 2 surveys)</span>
-              <strong>£700</strong>
+              <span style={{ color: "var(--text-2,#a1a1aa)" }}>Today — covers your first 3 booked surveys</span>
+              <strong>£1,200</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-2,#a1a1aa)" }}>Per confirmed survey after that</span>
-              <strong>£350</strong>
+              <span style={{ color: "var(--text-2,#a1a1aa)" }}>Auto top-up for the next 3 (when used up)</span>
+              <strong>£1,200</strong>
             </div>
           </div>
           <p style={{ color: "var(--text-3,#52525b)", fontSize: 13, marginBottom: 18 }}>
-            Each survey is a confirmed homeowner appointment booked into your calendar. You&apos;re only charged when one lands.
+            Each survey is a confirmed homeowner appointment in your calendar — £400 each. £1,200 covers 3; once they&apos;re used your card is automatically charged £1,200 for the next 3.
           </p>
           {error && <p style={{ color: "#f87171", fontSize: 13, marginBottom: 12 }}>{error}</p>}
           <button style={btn} onClick={startCheckout} disabled={submitting}>
-            {submitting ? <Loader2 size={16} className="spin" style={{ verticalAlign: "middle" }} /> : `Pay £700 & secure ${form.city || "my city"}`}
+            {submitting ? <Loader2 size={16} className="spin" style={{ verticalAlign: "middle" }} /> : `Pay £1,200 — secure 3 booked surveys`}
           </button>
           <button style={ghostBtn} onClick={() => setStep(1)} disabled={submitting}>Back</button>
         </div>
@@ -214,7 +214,7 @@ export default function ContractorOnboardingPage(): React.ReactElement {
           <CheckCircle2 size={40} color={gold} style={{ marginBottom: 14 }} />
           <h1 style={{ fontSize: 24, marginBottom: 10 }}>You&apos;re live.</h1>
           <p style={{ color: "var(--text-2,#a1a1aa)", fontSize: 15, lineHeight: 1.6 }}>
-            Your territory is secured. We&apos;ll call you the moment your first survey is confirmed — and it&apos;ll be in your calendar.
+            You&apos;re on the {form.city || "local"} roofer panel. We&apos;ll send confirmed surveys straight to your calendar — and call you the moment your first one lands.
           </p>
         </div>
       )}

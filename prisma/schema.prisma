@@ -177,6 +177,7 @@ model Lead {
   conversationState String @default("INITIAL") // INITIAL|QUALIFYING|OBJECTION_HANDLING|NEGOTIATING|BOOKING|CONFIRMED|DORMANT|REENGAGED
   lastContactAt     DateTime? // last outbound touch (call/SMS) — drives re-engagement timing
   reengageAttempts  Int       @default(0) // phantom call-back attempts made (max 3 → DORMANT)
+  assignedContractorId String? // round-robin contractor assigned at call placement; the booking + credit go to them
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   blueprint       CampaignBlueprint? @relation(fields: [blueprintId], references: [id])
@@ -403,10 +404,11 @@ model Contractor {
   priority               Int       @default(0) // routing order within a city+vertical (0 = primary, higher = backup)
   stripeCustomerId       String?   @unique
   stripePaymentMethodId  String?              // saved card for off-session charges
-  pricePerSurveyGbp      Int       @default(350)
-  lockInFeeGbp           Int       @default(700)
-  prepaidCreditRemaining Int       @default(0) // surveys already paid for (set to 2 on lock-in)
-  lockInPaidAt           DateTime?             // when the £700 lock-in cleared
+  pricePerSurveyGbp      Int       @default(400)   // £ per confirmed booking (1200 / 3)
+  lockInFeeGbp           Int       @default(1200)  // pre-pay block: £1,200 = 3 bookings; also the auto-recharge amount
+  prepaidCreditRemaining Int       @default(0)     // bookings remaining; set to 3 on lock-in, +3 on each £1,200 recharge
+  lockInPaidAt           DateTime?                 // when the first £1,200 lock-in cleared
+  lastAssignedAt         DateTime?                 // round-robin pointer: when this contractor was last given a booking
   status                 String    @default("pending") // pending | active | paused
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt

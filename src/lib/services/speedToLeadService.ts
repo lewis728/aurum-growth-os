@@ -16,6 +16,7 @@ import { buildClientContext } from "@/lib/agents/clientContext";
 import { callFrameForTier, type LeadTier } from "@/lib/services/leadEnrichmentService";
 import { getCityPersona, renderPersonaForCall } from "@/lib/intelligence/conversationalMatrix";
 import { getContractorAvailableSlots } from "@/lib/services/calendarService";
+import { assignRoundRobinContractor } from "@/lib/services/contractorBillingService";
 import { CampaignStatus } from "@/enums/campaignEnums";
 
 // Retell dynamic variables must all be strings. Renders the brief's
@@ -167,27 +168,25 @@ export async function placeSpeedToLeadCall(opts: {
     const persona = await getCityPersona(blueprint.vertical, blueprint.targetLocation);
     const localModel = renderPersonaForCall(persona);
 
-    // Availability-aware booking: find the city's active contractor and offer ONLY
-    // the slots they're actually free for (from their connected calendar). Empty
-    // string → Sophie books open-endedly (no calendar connected / none free).
+    // Round-robin: assign the NEXT contractor in this city (least-recently-booked,
+    // credit-topped-up or skipped), so the bot can name them on the call and book into
+    // THEIR calendar. We offer only their real free slots. assignedContractorId is
+    // persisted on the lead so the post-call settle goes to the same contractor.
     let availableSlots = "";
+    let rooferName = "";
+    let rooferCompany = "";
+    let assignedContractorId: string | null = null;
     try {
-      const contractor = await prisma.contractor.findFirst({
-        where: {
-          tenantId,
-          status: "active",
-          vertical: blueprint.vertical,
-          city: { equals: blueprint.targetLocation, mode: "insensitive" },
-        },
-        orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
-        select: { id: true },
-      });
+      const contractor = await assignRoundRobinContractor(tenantId, blueprint.targetLocation, blueprint.vertical);
       if (contractor) {
+        assignedContractorId = contractor.id;
+        rooferName = contractor.name;
+        rooferCompany = contractor.companyName?.trim() || contractor.name;
         const slots = await getContractorAvailableSlots(contractor.id);
         availableSlots = slots.map((s) => s.label).join("; ");
       }
     } catch (e) {
-      console.error("[speedToLead] availability lookup failed:", e instanceof Error ? e.message : e);
+      console.error("[speedToLead] contractor assignment failed:", e instanceof Error ? e.message : e);
     }
 
     const { callId } = await createPhoneCall({
@@ -208,12 +207,14 @@ export async function placeSpeedToLeadCall(opts: {
         tier_frame:             frame.tier_frame,
         local_conversational_model: localModel,
         available_slots:        availableSlots,
+        roofer_name:            rooferName,
+        roofer_company:         rooferCompany,
       },
     });
 
     // Stamp lastContactAt so the phantom call-back loop (Sprint 10C) can time
     // re-engagement from the moment of first contact.
-    await prisma.lead.update({ where: { id: lead.id }, data: { retellCallId: callId, lastContactAt: new Date() } });
+    await prisma.lead.update({ where: { id: lead.id }, data: { retellCallId: callId, lastContactAt: new Date(), assignedContractorId } });
     await logAction(
       "CALL_INITIATED",
       isRetry

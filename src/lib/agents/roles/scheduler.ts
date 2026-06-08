@@ -183,15 +183,9 @@ export async function handleCallOutcome(
         console.error("[scheduler] route+charge failed:", e instanceof Error ? e.message : e),
       );
 
-      const when = new Date(analysis.appointmentSlotTime).toLocaleString("en-GB", {
-        weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-      });
-      await safeSms(
-        renderTemplate(resolveTemplate("bookedConfirmation", savedTemplates, vertical), {
-          lead_first_name: lead.firstName, business_name: businessName, appointment_time: when,
-        }),
-      );
-
+      // The homeowner confirmation + the roofer's lead handoff SMS are sent by
+      // routeAndChargeBooking (it names the assigned roofer). No generic confirmation
+      // here — that would double-text the homeowner.
       return { status: 200, body: { success: true, booked: true } };
     }
 
